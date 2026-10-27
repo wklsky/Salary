@@ -8,6 +8,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import App from '@/App.vue'
+import TableView from '@/components/layout/TableView.vue'
 import { createDefaultIncomes } from '@/config/presets'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
@@ -18,18 +19,32 @@ describe('应用挂载冒烟', () => {
     localStorage.clear()
   })
 
-  it('渲染主布局与核心指标', () => {
+  it('默认进入录入设置视图并常驻展示年度到手', () => {
     const pinia = createPinia()
     const wrapper = mount(App, { global: { plugins: [pinia, ElementPlus] } })
 
     const text = wrapper.text()
     expect(text).toContain('薪资计算器')
+    expect(text).toContain('录入设置')
+    expect(text).toContain('月度明细')
+    expect(text).toContain('计算周期')
+    // 顶栏常驻年度到手，录入页也能看到结果
     expect(text).toContain('年度到手')
-    expect(text).toContain('单位用工成本')
-    expect(text).toContain('年度汇算')
     // 计算结果不得出现 NaN / Infinity，说明边界保护生效
     expect(text).not.toContain('NaN')
     expect(text).not.toContain('Infinity')
+  })
+
+  it('月度明细视图渲染结果卡片与年度汇总', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(TableView, { global: { plugins: [pinia, ElementPlus] } })
+
+    const text = wrapper.text()
+    expect(text).toContain('单位用工成本')
+    expect(text).toContain('年度汇总')
+    expect(text).toContain('点击任意月份可单独调整该月数据')
+    expect(text).not.toContain('NaN')
   })
 
   it('默认预设生成可见列且收入项自动派生动态列', () => {

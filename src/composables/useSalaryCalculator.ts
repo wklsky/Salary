@@ -7,6 +7,7 @@ import { computed, type ComputedRef } from 'vue'
 import { calculateSalary } from '@/core'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
+import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import type { SalaryInput, SalaryResult } from '@/types'
 
 export interface SalaryCalculator {
@@ -17,6 +18,7 @@ export interface SalaryCalculator {
 export function useSalaryCalculator(): SalaryCalculator {
   const salaryStore = useSalaryStore()
   const settingsStore = useSettingsStore()
+  const schemaStore = useTableSchemaStore()
 
   const input = computed<SalaryInput>(() => ({
     year: settingsStore.year,
@@ -29,6 +31,8 @@ export function useSalaryCalculator(): SalaryCalculator {
     endMonth: settingsStore.endMonth,
     taxpayerType: settingsStore.taxpayerType,
     taxReductionMonthly: settingsStore.taxReductionMonthly,
+    monthOverrides: salaryStore.monthOverrides,
+    customColumns: schemaStore.customColumnItems,
   }))
 
   // 计算内核为纯函数，入参变化即重算；12 个月的循环开销可忽略，不做防抖

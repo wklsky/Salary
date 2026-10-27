@@ -12,6 +12,7 @@ import type {
   InsuranceConfig,
   InsuranceMonthDetail,
   InsuranceType,
+  MonthOverride,
   StageRange,
   StageType,
 } from '@/types'
@@ -123,6 +124,8 @@ export interface ComputeInsuranceParams {
   endMonth: number
   /** 雇佣阶段划分；实习期等阶段可不缴纳社保 */
   stages: StageRange[]
+  /** 单月数据覆盖，可单独核定某月缴费基数 */
+  monthOverrides?: Record<number, MonthOverride>
 }
 
 export function computeInsuranceMonthly(params: ComputeInsuranceParams): InsuranceMonthDetail[] {
@@ -148,7 +151,12 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     // 基数按当月所处阶段与当月金额解析，使试用期与转正后可以采用不同的缴费基数
     const stage = stageTypeOfMonth(params.stages, month)
     const baseIncome = resolveBaseIncome(params.incomes, stage, month)
-    const rawBase = resolveRawBase(params.insurance, city, baseIncome)
+    // 单月核定的基数优先，仍受上下限约束，避免填出低于下限的基数
+    const overrideBase = params.monthOverrides?.[month]?.insuranceBase
+    const rawBase =
+      typeof overrideBase === 'number'
+        ? overrideBase
+        : resolveRawBase(params.insurance, city, baseIncome)
     const housingRawBase = resolveHousingFundRawBase(
       params.insurance,
       city,

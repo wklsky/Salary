@@ -7,8 +7,11 @@ import { INSURANCE_TYPES } from '@/types'
 import type {
   AnnualSummary,
   BonusComparison,
+  CustomColumnItem,
+  IncomeItem,
   InsuranceAnnualItem,
   InsuranceType,
+  MonthOverride,
   SalaryInput,
   SalaryResult,
 } from '@/types'
@@ -35,13 +38,46 @@ interface BonusItem {
   amount: number
 }
 
+/**
+ * 把用户自定义列转换为虚拟收入项
+ * 复用「逐月金额」机制承载 12 个月的列值，计税与计基逻辑无需为自定义列单独分支
+ */
+function buildCustomIncomeItems(
+  columns: CustomColumnItem[],
+  monthOverrides: Record<number, MonthOverride>,
+): IncomeItem[] {
+  return columns
+    // 未计入应发的自定义列仅作展示，不参与工资计算
+    .filter((column) => column.intoGross)
+    .map((column) => ({
+      id: column.key,
+      name: column.label,
+      amount: 0,
+      cycle: 'monthly' as const,
+      month: 1,
+      intoInsuranceBase: column.intoBase,
+      taxable: column.taxable,
+      kind: 'salary' as const,
+      enabled: true,
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
+      nonCash: false,
+      variableByMonth: true,
+      monthlyAmounts: Array.from({ length: 12 }, (_, index) => {
+        const override = monthOverrides[index + 1]?.amounts?.[column.key]
+        return typeof override === 'number' ? override : (column.values[index] ?? 0)
+      }),
+    }))
+}
+
 /** 收集当年一次性奖金，金额按发放当月所处阶段取值，按金额从大到小排序 */
-function collectBonusItems(input: SalaryInput): BonusItem[] {
-  return input.incomes
+function collectBonusItems(incomes: IncomeItem[], stages: SalaryInput['stages']): BonusItem[] {
+  return incomes
     .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
     .map((item) => ({
       id: item.id,
-      amount: amountOfMonth(item, item.month, stageTypeOfMonth(input.stages, item.month)),
+      amount: amountOfMonth(item, item.month, stageTypeOfMonth(stages, item.month)),
     }))
     .filter((item) => item.amount > 0)
     .sort((a, b) => b.amount - a.amount)
@@ -63,6 +99,7 @@ function runEngine(
     stages: input.stages,
     taxpayerType: input.taxpayerType,
     taxReductionMonthly: input.taxReductionMonthly,
+    monthOverrides: input.monthOverrides ?? {},
   })
 }
 
@@ -91,25 +128,34 @@ function bonusSplitCandidates(amount: number): number[] {
  * 年终奖会同时跑「单独计税」与「并入综合所得」两套口径，
  * auto 模式下进一步搜索「部分单独计税」的拆分点，取税负最低方案
  */
-export function calculateSalary(input: SalaryInput): SalaryResult {
+export function calculateSalary(rawInput: SalaryInput): SalaryResult {
+  const monthOverrides = rawInput.monthOverrides ?? {}
+  // 自定义列以虚拟收入项身份参与计算，与常规收入项走同一套计税/计基逻辑
+  const incomes: IncomeItem[] = [
+    ...rawInput.incomes,
+    ...buildCustomIncomeItems(rawInput.customColumns ?? [], monthOverrides),
+  ]
+  const input: SalaryInput = { ...rawInput, incomes, monthOverrides }
+
   const insuranceMonthly = computeInsuranceMonthly({
-    incomes: input.incomes,
+    incomes,
     insurance: input.insurance,
     startMonth: input.startMonth,
     endMonth: input.endMonth,
     stages: input.stages,
+    monthOverrides,
   })
 
   // 年终奖金额按发放当月所处阶段取值，试用期发放的奖金可能低于转正后
   const bonusAmount = sumMoney(
-    input.incomes
+    incomes
       .filter((item) => item.enabled && item.kind === 'bonus')
       .map((item) => amountOfMonth(item, item.month, stageTypeOfMonth(input.stages, item.month))),
   )
 
   const isResident = input.taxpayerType !== 'nonResident'
   // 一个纳税年度内只允许一笔奖金享受单独计税，取金额最大的那笔
-  const topBonus = isResident ? collectBonusItems(input)[0] : undefined
+  const topBonus = isResident ? collectBonusItems(incomes, input.stages)[0] : undefined
 
   const merged = runEngine(input, insuranceMonthly, {})
   const separate = runEngine(
@@ -190,6 +236,22 @@ export function calculateSalary(input: SalaryInput): SalaryResult {
     settlementDiff: settlement.settlementDiff,
     donationApplied: settlement.donationApplied,
   }
+
+  /**
+   * 回填自定义列的月度展示值
+   * 计入应发的列已在 incomeBreakdown 中体现，未计入的列仅展示不参与计算，
+   * 两者都写回 customValues，保证表格列与计算结果同源
+   */
+  chosen.monthly.forEach((month, index) => {
+    const values: Record<string, number> = {}
+    ;(input.customColumns ?? []).forEach((column) => {
+      const override = monthOverrides[index + 1]?.amounts?.[column.key]
+      values[column.key] = column.intoGross
+        ? (month.incomeBreakdown[column.key] ?? 0)
+        : (typeof override === 'number' ? override : column.values[index] ?? 0)
+    })
+    month.customValues = values
+  })
 
   let bonusComparison: BonusComparison | undefined
   if (bonusAmount > 0 && topBonus) {

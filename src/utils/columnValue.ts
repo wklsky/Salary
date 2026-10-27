@@ -19,6 +19,9 @@ export function resolveColumnValue(
   if (key === 'month') return row.month
   if (key === 'stage') return STAGE_LABELS[row.stage] ?? ''
 
+  // 用户自定义列取该列当月的数值；未计入应发的列也照常展示
+  if (column.custom) return row.customValues?.[key] ?? 0
+
   // 动态收入列直接取该收入项当月发放额
   if (column.dynamic) return row.incomeBreakdown[key] ?? 0
 

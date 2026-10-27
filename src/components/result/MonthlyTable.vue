@@ -19,6 +19,14 @@ type Row = MonthlyResult & { isTotal?: boolean }
 const { result } = useSalaryCalculator()
 const schemaStore = useTableSchemaStore()
 
+/**
+ * 对外事件
+ * @event row-click 点击数据行，回传该月月度结果
+ */
+const emit = defineEmits<{
+  'row-click': [row: MonthlyResult]
+}>()
+
 const stripe = ref(true)
 
 const columns = computed<ColumnSchema[]>(() => schemaStore.visibleColumns)
@@ -41,6 +49,7 @@ const rows = computed<Row[]>(() => {
     basicDeduction: 0,
     deductionTotal: 0,
     incomeBreakdown: {},
+    customValues: {},
     cumulativeTaxable: annual.taxableIncome,
     cumulativeTaxPaid: annual.tax,
     tax: annual.tax,
@@ -84,14 +93,21 @@ function cellText(row: Row, column: ColumnSchema): string {
 }
 
 function rowClassName({ row }: { row: Row }): string {
-  return row.isTotal ? 'total-row' : ''
+  return row.isTotal ? 'total-row' : 'data-row'
+}
+
+function onRowClick(row: Row) {
+  if (row.isTotal) return
+  emit('row-click', row)
 }
 </script>
 
 <template>
   <div class="monthly-table">
     <div class="monthly-table__toolbar">
-      <span class="monthly-table__count">已展示 {{ columns.length }} 列</span>
+      <span class="monthly-table__count">
+        已展示 {{ columns.length }} 列，点击任意月份可单独调整该月数据
+      </span>
       <el-checkbox v-model="stripe" size="small">斑马纹</el-checkbox>
     </div>
 
@@ -103,6 +119,7 @@ function rowClassName({ row }: { row: Row }): string {
       height="480"
       :row-class-name="rowClassName"
       show-overflow-tooltip
+      @row-click="onRowClick"
     >
       <el-table-column
         v-for="column in columns"
@@ -139,5 +156,9 @@ function rowClassName({ row }: { row: Row }): string {
 
 .monthly-table :deep(.total-row td) {
   background: var(--el-color-primary-light-9) !important;
+}
+
+.monthly-table :deep(.data-row) {
+  cursor: pointer;
 }
 </style>

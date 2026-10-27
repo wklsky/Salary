@@ -56,6 +56,8 @@ export interface MonthlyResult {
   deductionTotal: number
   /** 当月各收入项金额，key 为 IncomeItem.id，用于动态列渲染 */
   incomeBreakdown: Record<string, number>
+  /** 用户自定义列的当月数值，key 为自定义列 key；未计入应发的列也在此展示 */
+  customValues: Record<string, number>
   /** 累计应纳税所得额 */
   cumulativeTaxable: number
   /** 累计已预扣税额 */

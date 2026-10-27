@@ -567,6 +567,139 @@ describe('边界与异常', () => {
   })
 })
 
+describe('单月数据与自定义列', () => {
+  it('单月覆盖优先于阶段与逐月金额', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 15000 })],
+        monthOverrides: { 3: { amounts: { salary: 20000 } } },
+      }),
+    )
+    expect(result.monthly[0]?.gross).toBe(15000)
+    expect(result.monthly[2]?.gross).toBe(20000)
+    expect(result.monthly[3]?.gross).toBe(15000)
+  })
+
+  it('单月覆盖可让已停发的收入项在该月发放', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({
+            id: 'perf',
+            amount: 3000,
+            staged: true,
+            stageEnabled: { intern: false, regular: true },
+            stageAmounts: { intern: 3000, regular: 3000 },
+          }),
+        ],
+        stages: [makeStage('intern', 1, 3), makeStage('regular', 4, 12)],
+        // 2 月补发一笔绩效
+        monthOverrides: { 2: { amounts: { perf: 1500 } } },
+      }),
+    )
+    expect(result.monthly[0]?.gross).toBe(0)
+    expect(result.monthly[1]?.gross).toBe(1500)
+    expect(result.monthly[3]?.gross).toBe(3000)
+  })
+
+  it('单月缴费基数可单独核定', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })],
+      insurance: makeInsurance({ clampEnabled: false }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [],
+      monthOverrides: { 2: { insuranceBase: 8000 } },
+    })
+    expect(detail[0]?.base).toBe(15000)
+    expect(detail[1]?.base).toBe(8000)
+  })
+
+  it('自定义列计入应发并参与计税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 5000 })],
+        customColumns: [
+          {
+            key: 'custom_1',
+            label: '项目奖金',
+            values: [0, 0, 0, 0, 0, 6000, 0, 0, 0, 0, 0, 0],
+            intoGross: true,
+            taxable: true,
+            intoBase: false,
+          },
+        ],
+      }),
+    )
+    // 6 月：工资 5000 + 项目奖金 6000
+    expect(result.monthly[5]?.customValues.custom_1).toBe(6000)
+    expect(result.monthly[5]?.gross).toBe(11000)
+    expect(result.monthly[0]?.gross).toBe(5000)
+  })
+
+  it('未计入应发的自定义列仅展示不参与计算', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 5000 })],
+        customColumns: [
+          {
+            key: 'custom_1',
+            label: '备注金额',
+            values: [1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            intoGross: false,
+            taxable: false,
+            intoBase: false,
+          },
+        ],
+      }),
+    )
+    expect(result.monthly[0]?.customValues.custom_1).toBe(1000)
+    expect(result.monthly[0]?.gross).toBe(5000)
+    expect(result.monthly[0]?.comprehensiveIncome).toBe(5000)
+  })
+
+  it('单月覆盖可修改自定义列的当月金额', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 5000 })],
+        customColumns: [
+          {
+            key: 'custom_1',
+            label: '项目奖金',
+            values: Array<number>(12).fill(3000),
+            intoGross: true,
+            taxable: true,
+            intoBase: false,
+          },
+        ],
+        monthOverrides: { 1: { amounts: { custom_1: 9000 } } },
+      }),
+    )
+    expect(result.monthly[0]?.customValues.custom_1).toBe(9000)
+    expect(result.monthly[1]?.customValues.custom_1).toBe(3000)
+  })
+
+  it('自定义列计入缴费基数时抬高社保基数', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 15000, intoInsuranceBase: true })],
+        insurance: makeInsurance({ clampEnabled: false }),
+        customColumns: [
+          {
+            key: 'custom_1',
+            label: '技术津贴',
+            values: Array<number>(12).fill(3000),
+            intoGross: true,
+            taxable: true,
+            intoBase: true,
+          },
+        ],
+      }),
+    )
+    expect(result.insuranceMonthly[0]?.base).toBe(18000)
+  })
+})
+
 describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
   it('劳务报酬不超过 4000 元按次减除 800 元', () => {
     // 3000 − 800 = 2200，20% 预扣

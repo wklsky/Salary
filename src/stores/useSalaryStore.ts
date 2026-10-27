@@ -20,6 +20,7 @@ import type {
   InsuranceConfig,
   InsuranceItemConfig,
   InsuranceType,
+  MonthOverride,
   StageRange,
   StageType,
 } from '@/types'
@@ -36,6 +37,8 @@ export interface SalaryScheme {
   insurance: InsuranceConfig
   deductions: DeductionStateMap
   stages: StageRange[]
+  /** 单月数据覆盖；旧存档缺失时视为无覆盖 */
+  monthOverrides?: Record<number, MonthOverride>
 }
 
 export function createDefaultInsurance(): InsuranceConfig {
@@ -80,6 +83,8 @@ export const useSalaryStore = defineStore(
     const deductions = ref<DeductionStateMap>(createDefaultDeductions())
     /** 雇佣阶段划分：实习期/试用期/转正后，决定逐月发放与社保缴纳 */
     const stages = ref<StageRange[]>(createDefaultStages())
+    /** 单月数据覆盖，key 为月份；用于表达「某月与规则不同」的实际发放 */
+    const monthOverrides = ref<Record<number, MonthOverride>>({})
     const schemes = ref<SalaryScheme[]>([])
 
     /** 已启用的收入项，表格动态列以此为数据源 */
@@ -197,6 +202,10 @@ export const useSalaryStore = defineStore(
     function normalize() {
       incomes.value = normalizeIncomes(incomes.value)
       if (!Array.isArray(stages.value)) stages.value = createDefaultStages()
+      // 单月覆盖为后加能力，缺失时视为无覆盖，计算结果与升级前一致
+      if (typeof monthOverrides.value !== 'object' || monthOverrides.value === null) {
+        monthOverrides.value = {}
+      }
       // 阶段停缴险种为后加能力，缺失时视为不停缴，保证行为不变
       stages.value = stages.value.map((stage) => ({
         ...stage,
@@ -288,6 +297,43 @@ export const useSalaryStore = defineStore(
       insurance.value = createDefaultInsurance()
       deductions.value = createDefaultDeductions()
       stages.value = createDefaultStages()
+      monthOverrides.value = {}
+    }
+
+    /** 取某月的覆盖对象，缺失时创建，避免调用方判空 */
+    function ensureMonthOverride(month: number): MonthOverride {
+      const current = monthOverrides.value[month]
+      if (current) return current
+      const created: MonthOverride = {}
+      monthOverrides.value = { ...monthOverrides.value, [month]: created }
+      return created
+    }
+
+    /** 覆盖某月某个数据项的金额，传入 undefined 表示恢复按规则计算 */
+    function setMonthAmount(month: number, key: string, amount: number | undefined) {
+      const override = ensureMonthOverride(month)
+      const amounts = { ...(override.amounts ?? {}) }
+      if (amount === undefined) delete amounts[key]
+      else amounts[key] = amount
+      override.amounts = amounts
+    }
+
+    function setMonthInsuranceBase(month: number, base: number | undefined) {
+      const override = ensureMonthOverride(month)
+      override.insuranceBase = base
+    }
+
+    function setMonthNote(month: number, note: string) {
+      const override = ensureMonthOverride(month)
+      override.note = note
+    }
+
+    /** 清空某月的所有覆盖，恢复为按规则自动计算 */
+    function resetMonth(month: number) {
+      if (!monthOverrides.value[month]) return
+      const next = { ...monthOverrides.value }
+      delete next[month]
+      monthOverrides.value = next
     }
 
     function saveScheme(name: string, meta: { year: number; startMonth: number; bonusMode: 'separate' | 'merged' | 'auto' }) {
@@ -302,6 +348,10 @@ export const useSalaryStore = defineStore(
         insurance: JSON.parse(JSON.stringify(insurance.value)) as InsuranceConfig,
         deductions: JSON.parse(JSON.stringify(deductions.value)) as DeductionStateMap,
         stages: JSON.parse(JSON.stringify(stages.value)) as StageRange[],
+        monthOverrides: JSON.parse(JSON.stringify(monthOverrides.value)) as Record<
+          number,
+          MonthOverride
+        >,
       }
       schemes.value.push(scheme)
       return scheme
@@ -314,6 +364,9 @@ export const useSalaryStore = defineStore(
       insurance.value = JSON.parse(JSON.stringify(scheme.insurance)) as InsuranceConfig
       deductions.value = JSON.parse(JSON.stringify(scheme.deductions)) as DeductionStateMap
       stages.value = JSON.parse(JSON.stringify(scheme.stages ?? createDefaultStages())) as StageRange[]
+      monthOverrides.value = (JSON.parse(
+        JSON.stringify(scheme.monthOverrides ?? {}),
+      ) as Record<number, MonthOverride>) ?? {}
       return { year: scheme.year, startMonth: scheme.startMonth, bonusMode: scheme.bonusMode }
     }
 
@@ -328,6 +381,10 @@ export const useSalaryStore = defineStore(
         insurance: JSON.parse(JSON.stringify(insurance.value)) as InsuranceConfig,
         deductions: JSON.parse(JSON.stringify(deductions.value)) as DeductionStateMap,
         stages: JSON.parse(JSON.stringify(stages.value)) as StageRange[],
+        monthOverrides: JSON.parse(JSON.stringify(monthOverrides.value)) as Record<
+          number,
+          MonthOverride
+        >,
       }
     }
 
@@ -336,6 +393,7 @@ export const useSalaryStore = defineStore(
       insurance?: InsuranceConfig
       deductions?: DeductionStateMap
       stages?: StageRange[]
+      monthOverrides?: Record<number, MonthOverride>
     }) {
       if (Array.isArray(payload.incomes)) incomes.value = normalizeIncomes(payload.incomes)
       if (payload.insurance) insurance.value = { ...createDefaultInsurance(), ...payload.insurance }
@@ -343,6 +401,9 @@ export const useSalaryStore = defineStore(
         deductions.value = { ...createDefaultDeductions(), ...payload.deductions }
       }
       if (Array.isArray(payload.stages)) stages.value = payload.stages
+      if (payload.monthOverrides && typeof payload.monthOverrides === 'object') {
+        monthOverrides.value = payload.monthOverrides
+      }
     }
 
     return {
@@ -350,6 +411,7 @@ export const useSalaryStore = defineStore(
       insurance,
       deductions,
       stages,
+      monthOverrides,
       schemes,
       activeIncomes,
       bonusTotal,
@@ -362,6 +424,10 @@ export const useSalaryStore = defineStore(
       toggleStagedIncome,
       toggleVariableByMonth,
       updateMonthlyAmount,
+      setMonthAmount,
+      setMonthInsuranceBase,
+      setMonthNote,
+      resetMonth,
       moveIncome,
       addStage,
       removeStage,

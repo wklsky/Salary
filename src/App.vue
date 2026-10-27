@@ -2,21 +2,15 @@
 /**
  * @Author: wj
  * @FilePath: src/App.vue
- * @Description: 应用主布局：左侧录入区、右侧结果区，含列配置、方案存档与导入导出
+ * @Description: 应用外壳：视图切换（录入设置 / 月度明细）、方案存档与导入导出
  */
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
-import { Download, Refresh, Setting, Upload } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { Download, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import BonusAdvice from '@/components/result/BonusAdvice.vue'
-import AnnualTable from '@/components/result/AnnualTable.vue'
-import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
-import IncomeEditor from '@/components/income/IncomeEditor.vue'
-import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
-import MonthlyTable from '@/components/result/MonthlyTable.vue'
-import ResultCards from '@/components/result/ResultCards.vue'
-import StageEditor from '@/components/stage/StageEditor.vue'
+import SetupView from '@/components/layout/SetupView.vue'
+import TableView from '@/components/layout/TableView.vue'
 import ColumnConfigDrawer from '@/components/table-config/ColumnConfigDrawer.vue'
-import { BONUS_SEPARATE_VALID_UNTIL, POLICY_DISCLAIMER, POLICY_VERSION } from '@/config/policy'
+import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import { useExport } from '@/composables/useExport'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
@@ -24,30 +18,18 @@ import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import type { BonusMode } from '@/types'
 
-// 图表依赖 ECharts 且非首屏必需，走异步组件避免拖慢首屏渲染
-const ChartPanel = defineAsyncComponent(() => import('@/components/chart/ChartPanel.vue'))
+/** 视图标识：先录入设置，再进入月度明细 */
+type AppView = 'setup' | 'table'
 
 const salaryStore = useSalaryStore()
 const settingsStore = useSettingsStore()
 const schemaStore = useTableSchemaStore()
 const { result } = useSalaryCalculator()
-const { exportMonthlyCsv, exportJson, readJsonFile } = useExport()
+const { exportJson, readJsonFile } = useExport()
 
-const inputTab = ref('income')
-const resultTab = ref('monthly')
+const view = ref<AppView>('setup')
 const drawerVisible = ref(false)
 const activeSchemeId = ref('')
-
-const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
-  value: index + 1,
-  label: `${index + 1} 月`,
-}))
-
-const BONUS_MODE_OPTIONS: { value: BonusMode; label: string }[] = [
-  { value: 'auto', label: '自动择优' },
-  { value: 'separate', label: '单独计税' },
-  { value: 'merged', label: '并入综合所得' },
-]
 
 /**
  * 补全旧版本 localStorage 存档缺失的字段
@@ -66,25 +48,16 @@ watch(
   { immediate: true, deep: true },
 )
 
-const currentBonusMode = computed({
-  get: () => settingsStore.bonusMode,
-  set: (value: BonusMode) => settingsStore.updateSettings({ bonusMode: value }),
-})
+/** 年度到手，用于顶栏常驻展示，切换视图时也能一眼看到结果 */
+const annualNet = computed(() => result.value.annual.net)
 
-function onExportCsv() {
-  exportMonthlyCsv({
-    columns: schemaStore.visibleColumns,
-    rows: result.value.monthly,
-    insuranceMonthly: result.value.insuranceMonthly,
-    filename: `薪资明细_${settingsStore.year}.csv`,
-  })
-}
-
-function onExportJson() {
+async function onExportJson() {
   exportJson(
     {
       year: settingsStore.year,
       startMonth: settingsStore.startMonth,
+      endMonth: settingsStore.endMonth,
+      monthCount: settingsStore.monthCount,
       bonusMode: settingsStore.bonusMode,
       ...salaryStore.exportSnapshot(),
     },
@@ -97,17 +70,22 @@ async function onImportJson(rawFile: File) {
     const payload = await readJsonFile<{
       year?: number
       startMonth?: number
+      endMonth?: number
+      monthCount?: number
       bonusMode?: BonusMode
       incomes?: Parameters<typeof salaryStore.importSnapshot>[0]['incomes']
       insurance?: Parameters<typeof salaryStore.importSnapshot>[0]['insurance']
       deductions?: Parameters<typeof salaryStore.importSnapshot>[0]['deductions']
       stages?: Parameters<typeof salaryStore.importSnapshot>[0]['stages']
+      monthOverrides?: Parameters<typeof salaryStore.importSnapshot>[0]['monthOverrides']
     }>(rawFile)
 
     salaryStore.importSnapshot(payload)
     settingsStore.updateSettings({
       year: payload.year,
       startMonth: payload.startMonth,
+      endMonth: payload.endMonth,
+      monthCount: payload.monthCount,
       bonusMode: payload.bonusMode,
     })
     ElMessage.success('配置已导入')
@@ -160,6 +138,7 @@ async function onReset() {
     })
     salaryStore.resetAll()
     schemaStore.resetColumns()
+    view.value = 'setup'
     ElMessage.success('已重置')
   } catch (error) {
     // 用户取消重置
@@ -174,10 +153,15 @@ async function onReset() {
       <div class="app__brand">
         <h1 class="app__title">薪资计算器</h1>
         <el-tag size="small" effect="plain">政策版本 {{ POLICY_VERSION }}</el-tag>
-        <span class="app__policy-tip">年终奖单独计税有效期至 {{ BONUS_SEPARATE_VALID_UNTIL }}</span>
       </div>
 
+      <el-radio-group v-model="view" size="small" class="app__switch">
+        <el-radio-button value="setup">录入设置</el-radio-button>
+        <el-radio-button value="table">月度明细</el-radio-button>
+      </el-radio-group>
+
       <div class="app__actions">
+        <span class="app__net">年度到手 ¥{{ annualNet.toLocaleString('zh-CN') }}</span>
         <el-select
           v-model="activeSchemeId"
           size="small"
@@ -192,131 +176,24 @@ async function onReset() {
           />
         </el-select>
         <el-button size="small" :disabled="!activeSchemeId" @click="onApplyScheme">应用</el-button>
-        <el-button size="small" :disabled="!activeSchemeId" @click="onRemoveScheme">删除</el-button>
         <el-button size="small" @click="onSaveScheme">保存当前</el-button>
+        <el-button size="small" plain :disabled="!activeSchemeId" @click="onRemoveScheme">
+          删除
+        </el-button>
         <el-divider direction="vertical" />
         <el-upload :show-file-list="false" accept=".json" :before-upload="onImportJson">
           <el-button size="small" :icon="Upload">导入</el-button>
         </el-upload>
         <el-button size="small" :icon="Download" @click="onExportJson">导出配置</el-button>
-        <el-button size="small" :icon="Download" type="primary" plain @click="onExportCsv">
-          导出明细
-        </el-button>
-        <el-button size="small" :icon="Setting" @click="drawerVisible = true">表格列</el-button>
         <el-button size="small" :icon="Refresh" @click="onReset">重置</el-button>
       </div>
+
+      <p class="app__policy-tip">年终奖单独计税有效期至 {{ BONUS_SEPARATE_VALID_UNTIL }}</p>
     </header>
 
     <main class="app__body">
-      <el-card class="app__aside" shadow="never">
-        <el-tabs v-model="inputTab" class="input-tabs">
-          <!-- 页签全部懒加载：仅渲染当前激活面板，避免首屏同时挂载大量表单与表格 -->
-          <el-tab-pane label="收入项" name="income" lazy>
-            <IncomeEditor />
-          </el-tab-pane>
-          <el-tab-pane label="五险一金" name="insurance" lazy>
-            <InsuranceEditor />
-          </el-tab-pane>
-          <el-tab-pane label="雇佣阶段" name="stage" lazy>
-            <StageEditor />
-          </el-tab-pane>
-          <el-tab-pane label="扣除项" name="deduction" lazy>
-            <DeductionEditor />
-          </el-tab-pane>
-          <el-tab-pane label="设置" name="settings" lazy>
-            <el-form label-width="96px" size="small">
-              <el-form-item label="计算年度">
-                <el-input-number
-                  v-model="settingsStore.year"
-                  :min="2000"
-                  :max="2099"
-                  controls-position="right"
-                  class="full-width"
-                />
-              </el-form-item>
-              <el-form-item label="入职月份">
-                <el-select v-model="settingsStore.startMonth" class="full-width">
-                  <el-option
-                    v-for="option in MONTH_OPTIONS"
-                    :key="option.value"
-                    :label="option.label"
-                    :value="option.value"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="离职月份">
-                <el-select v-model="settingsStore.endMonth" class="full-width">
-                  <el-option
-                    v-for="option in MONTH_OPTIONS"
-                    :key="option.value"
-                    :label="option.label"
-                    :value="option.value"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="纳税人身份">
-                <el-radio-group v-model="settingsStore.taxpayerType">
-                  <el-radio value="resident">居民个人（累计预扣）</el-radio>
-                  <el-radio value="nonResident">非居民个人（按月计税）</el-radio>
-                </el-radio-group>
-              </el-form-item>
-              <el-form-item label="每月减免税额">
-                <el-input-number
-                  v-model="settingsStore.taxReductionMonthly"
-                  :min="0"
-                  :step="100"
-                  :precision="2"
-                  controls-position="right"
-                  class="full-width"
-                />
-              </el-form-item>
-              <el-form-item label="年终奖计税">
-                <el-radio-group v-model="currentBonusMode">
-                  <el-radio
-                    v-for="option in BONUS_MODE_OPTIONS"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </el-radio>
-                </el-radio-group>
-              </el-form-item>
-            </el-form>
-            <el-alert
-              :closable="false"
-              type="info"
-              class="app__settings-tip"
-              title="本工具按自然年计算；跨年周期（如 2025 年 7 月至 2026 年 6 月）请分两个年度录入后自行合计"
-            />
-            <el-alert :closable="false" type="info" :title="POLICY_DISCLAIMER" />
-          </el-tab-pane>
-        </el-tabs>
-      </el-card>
-
-      <section class="app__content">
-        <ResultCards />
-        <BonusAdvice />
-
-        <el-card shadow="never" class="result-card-wrapper">
-          <el-tabs v-model="resultTab">
-            <el-tab-pane label="月度明细" name="monthly" lazy>
-              <MonthlyTable />
-            </el-tab-pane>
-            <el-tab-pane label="年度汇总" name="annual" lazy>
-              <AnnualTable />
-            </el-tab-pane>
-            <!-- 图表依赖 ECharts，设为懒加载，切换到该页签时才发起组件请求 -->
-            <el-tab-pane label="图表" name="chart" lazy>
-              <Suspense>
-                <ChartPanel />
-                <template #fallback>
-                  <div class="chart-loading">图表加载中…</div>
-                </template>
-              </Suspense>
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
-      </section>
+      <SetupView v-if="view === 'setup'" @next="view = 'table'" />
+      <TableView v-else @back="view = 'setup'" @config-columns="drawerVisible = true" />
     </main>
 
     <ColumnConfigDrawer v-model="drawerVisible" />
@@ -332,9 +209,8 @@ async function onReset() {
 .app__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 12px 20px;
+  padding: 10px 20px;
   background: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-lighter);
   flex-wrap: wrap;
@@ -352,56 +228,33 @@ async function onReset() {
   font-weight: 600;
 }
 
-.app__policy-tip {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 .app__actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
-.scheme-select {
-  width: 150px;
+.app__net {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-.app__body {
-  display: grid;
-  grid-template-columns: minmax(380px, 440px) minmax(0, 1fr);
-  gap: 16px;
-  padding: 16px 20px;
-  align-items: start;
-}
-
-.app__aside {
-  position: sticky;
-  top: 16px;
-}
-
-.result-card-wrapper {
-  margin-top: 12px;
-}
-
-.full-width {
+.app__policy-tip {
   width: 100%;
-}
-
-.chart-loading {
-  padding: 40px;
-  text-align: center;
+  margin: 0;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 
-@media (max-width: 1200px) {
-  .app__body {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.scheme-select {
+  width: 140px;
+}
 
-  .app__aside {
-    position: static;
-  }
+.app__body {
+  padding: 16px 20px 32px;
 }
 </style>

@@ -8,7 +8,14 @@ import { computed, ref } from 'vue'
 import { createStaticColumns } from '@/config/columns'
 import { COLUMN_PRESETS, DEFAULT_PRESET_ID } from '@/config/presets'
 import { createId } from '@/utils/id'
-import type { ColumnGroup, ColumnPreset, ColumnSchema, IncomeItem } from '@/types'
+import type {
+  ColumnGroup,
+  ColumnPreset,
+  ColumnSchema,
+  CustomColumnDef,
+  CustomColumnItem,
+  IncomeItem,
+} from '@/types'
 
 /** 动态收入列的起始排序值，落在静态收入列区间内 */
 const DYNAMIC_COLUMN_ORDER_BASE = 150
@@ -23,6 +30,21 @@ export const useTableSchemaStore = defineStore(
     /** 按当前可见性与顺序输出，供表格渲染 */
     const visibleColumns = computed(() =>
       [...columns.value].filter((column) => column.visible).sort((a, b) => a.order - b.order),
+    )
+
+    /** 用户手动新增的自定义列 */
+    const customColumns = computed(() => columns.value.filter((column) => column.custom))
+
+    /** 自定义列转换为内核可识别的入参 */
+    const customColumnItems = computed<CustomColumnItem[]>(() =>
+      customColumns.value.map((column) => ({
+        key: column.key,
+        label: column.customLabel || column.label,
+        values: column.custom?.values ?? Array<number>(12).fill(0),
+        intoGross: column.custom?.intoGross ?? true,
+        taxable: column.custom?.taxable ?? true,
+        intoBase: column.custom?.intoBase ?? false,
+      })),
     )
 
     const columnsByGroup = computed(() => {
@@ -68,6 +90,51 @@ export const useTableSchemaStore = defineStore(
     function isIncomeColumnVisibleByPreset(): boolean {
       const preset = presets.value.find((item) => item.id === activePresetId.value)
       return preset?.includeIncomeColumns ?? true
+    }
+
+    /** 新增自定义列：默认计入应发与计税，不计入社保基数 */
+    function addCustomColumn(name: string): ColumnSchema {
+      const key = createId('custom')
+      const column: ColumnSchema = {
+        key,
+        label: name,
+        group: 'income',
+        visible: true,
+        // 排在动态收入列之后，避免打断既有列序
+        order: DYNAMIC_COLUMN_ORDER_BASE + 60 + columns.value.length,
+        width: 120,
+        formatter: 'money',
+        dynamic: false,
+        custom: {
+          values: Array<number>(12).fill(0),
+          intoGross: true,
+          taxable: true,
+          intoBase: false,
+        },
+      }
+      columns.value.push(column)
+      activePresetId.value = ''
+      return column
+    }
+
+    function removeCustomColumn(key: string) {
+      columns.value = columns.value.filter((column) => column.key !== key)
+      activePresetId.value = ''
+    }
+
+    function updateCustomColumn(key: string, payload: Partial<CustomColumnDef>) {
+      const target = columns.value.find((column) => column.key === key)
+      if (!target?.custom) return
+      Object.assign(target.custom, payload)
+    }
+
+    /** 设置自定义列在某月的数值，下标 0-11 对应 1-12 月 */
+    function setCustomValue(key: string, month: number, value: number) {
+      const target = columns.value.find((column) => column.key === key)
+      if (!target?.custom) return
+      const values = [...target.custom.values]
+      values[month - 1] = value
+      target.custom.values = values
     }
 
     function updateColumn(key: string, payload: Partial<ColumnSchema>) {
@@ -153,7 +220,13 @@ export const useTableSchemaStore = defineStore(
       activePresetId,
       visibleColumns,
       columnsByGroup,
+      customColumns,
+      customColumnItems,
       syncDynamicColumns,
+      addCustomColumn,
+      removeCustomColumn,
+      updateCustomColumn,
+      setCustomValue,
       updateColumn,
       toggleColumn,
       reorderColumns,

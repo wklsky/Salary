@@ -20,6 +20,37 @@ export type BonusMode = 'separate' | 'merged' | 'auto'
 /** 纳税人身份：居民个人按年累计预扣，非居民个人按月单独计税 */
 export type TaxpayerType = 'resident' | 'nonResident'
 
+/**
+ * 单月数据覆盖
+ * 用于「某月实际发放与规则不同」的场景，如 3 月多了一笔补贴、某月社保基数被单独核定
+ * 覆盖值优先级高于收入项自身的阶段/逐月口径
+ */
+export interface MonthOverride {
+  /** 各数据项在该月的金额，key 为 IncomeItem.id 或自定义列 key */
+  amounts?: Record<string, number>
+  /** 该月社保缴费基数单独核定值 */
+  insuranceBase?: number
+  /** 该月备注 */
+  note?: string
+}
+
+/**
+ * 用户自定义的表格列（金额型）
+ * 与收入项的区别：不带阶段、税率类别等复杂配置，仅表达「表格里要多一列并参与计算」
+ */
+export interface CustomColumnItem {
+  key: string
+  label: string
+  /** 逐月数值，长度 12，下标 0-11 对应 1-12 月 */
+  values: number[]
+  /** 是否计入应发；关闭时该列仅作展示，不影响工资计算 */
+  intoGross: boolean
+  /** 计入应发时是否并入综合所得计税 */
+  taxable: boolean
+  /** 计入应发时是否计入社保缴费基数 */
+  intoBase: boolean
+}
+
 export interface SalaryInput {
   /** 计算年度 */
   year: number
@@ -37,6 +68,10 @@ export interface SalaryInput {
   taxpayerType: TaxpayerType
   /** 每月减免税额（元），如残疾、孤老、烈属等减征政策 */
   taxReductionMonthly: number
+  /** 单月数据覆盖，key 为月份 1-12；缺省月份按收入项自身口径计算 */
+  monthOverrides?: Record<number, MonthOverride>
+  /** 用户自定义表格列，会转换为虚拟收入项参与计算 */
+  customColumns?: CustomColumnItem[]
 }
 
 /** 年终奖两种口径的税负对比 */

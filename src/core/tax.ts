@@ -5,7 +5,7 @@
  */
 import { BASIC_DEDUCTION_MONTHLY } from '@/config/policy'
 import { DEDUCTION_KEYS } from '@/types'
-import type { DeductionKey, DeductionStateMap } from '@/types'
+import type { DeductionKey, DeductionStateMap, MonthOverride } from '@/types'
 import type { IncomeItem } from '@/types'
 import type { InsuranceMonthDetail, MonthlyResult } from '@/types'
 import type { StageRange, TaxpayerType } from '@/types'
@@ -38,6 +38,8 @@ export interface EngineContext {
   taxpayerType: TaxpayerType
   /** 每月减免税额（元），如残疾、孤老、烈属等减征政策 */
   taxReductionMonthly: number
+  /** 单月数据覆盖，缺省月份按收入项自身口径计算 */
+  monthOverrides: Record<number, MonthOverride>
 }
 
 export interface EngineResult extends AnnualSnapshot {
@@ -80,6 +82,7 @@ function incomeOfMonth(
   endMonth: number,
   bonusSeparateAmounts: Record<string, number>,
   stages: StageRange[],
+  monthOverrides: Record<number, MonthOverride>,
 ): MonthIncome {
   const enabled = incomes.filter((item) => item.enabled)
   const breakdown: Record<string, number> = {}
@@ -107,8 +110,13 @@ function incomeOfMonth(
   let nonCash = 0
   let otherTax = 0
   let otherIncome = 0
+  const overrideAmounts = monthOverrides[month]?.amounts ?? {}
+
   enabled.forEach((item) => {
-    const monthlyAmount = amountOfMonth(item, month, stage)
+    // 单月覆盖最具体，优先于阶段停发、逐月金额与阶段金额
+    const overrideAmount = overrideAmounts[item.id]
+    const monthlyAmount =
+      typeof overrideAmount === 'number' ? overrideAmount : amountOfMonth(item, month, stage)
     const paid = item.cycle === 'monthly' ? monthlyAmount : item.month === month ? monthlyAmount : 0
     if (paid <= 0) return
     gross = round2(dec(gross).plus(paid))
@@ -278,6 +286,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       ctx.endMonth,
       ctx.bonusSeparateAmounts,
       ctx.stages,
+      ctx.monthOverrides,
     )
     const deductionTotal = isResident
       ? deductionOfMonth(ctx.deductions, month, ctx.startMonth, ctx.endMonth, false)
@@ -399,6 +408,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       bonusTax,
       otherTax: income.otherTax,
       otherIncome: income.otherIncome,
+      customValues: {},
       taxTotal,
       net,
     })

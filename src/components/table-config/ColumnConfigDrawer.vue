@@ -6,7 +6,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Sortable from 'sortablejs'
-import { Delete, Rank } from '@element-plus/icons-vue'
+import { Delete, Plus, Rank } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { COLUMN_GROUP_LABELS } from '@/config/columns'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
@@ -130,6 +130,28 @@ const optionalGroups = computed(() => {
 function onSelectAll() {
   schemaStore.setVisibleKeys(schemaStore.columns.map((column) => column.key))
 }
+
+const newColumnName = ref('')
+
+/** 新增自定义列：自带 12 个月的数值，可在单月编辑里逐月填写并参与计算 */
+function onAddCustomColumn() {
+  const name = newColumnName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入列名称')
+    return
+  }
+  schemaStore.addCustomColumn(name)
+  newColumnName.value = ''
+  ElMessage.success('已添加自定义列，可在明细页点击月份填写金额')
+}
+
+function onRemoveCustomColumn(column: ColumnSchema) {
+  schemaStore.removeCustomColumn(column.key)
+}
+
+function onCustomFlagChange(column: ColumnSchema, field: 'intoGross' | 'taxable' | 'intoBase', value: boolean) {
+  schemaStore.updateCustomColumn(column.key, { [field]: value })
+}
 </script>
 
 <template>
@@ -227,6 +249,80 @@ function onSelectAll() {
           </div>
         </section>
       </div>
+
+      <section class="panel custom-panel">
+        <header class="panel__head">
+          <span class="section-title">自定义列</span>
+          <span class="panel__count">{{ schemaStore.customColumns.length }}</span>
+        </header>
+
+        <div class="custom-add">
+          <el-input
+            v-model="newColumnName"
+            size="small"
+            placeholder="列名称，如「项目奖金」「补贴」"
+            class="custom-add__input"
+            @keyup.enter="onAddCustomColumn"
+          />
+          <el-button size="small" type="primary" :icon="Plus" @click="onAddCustomColumn">
+            添加表头
+          </el-button>
+        </div>
+
+        <ul class="custom-list">
+          <li v-for="column in schemaStore.customColumns" :key="column.key" class="custom-item">
+            <div class="custom-item__head">
+              <el-input
+                :model-value="column.customLabel || column.label"
+                size="small"
+                class="custom-item__name"
+                @update:model-value="(value: string) => onRename(column, value)"
+              />
+              <el-button
+                :icon="Delete"
+                size="small"
+                text
+                type="danger"
+                @click="onRemoveCustomColumn(column)"
+              />
+            </div>
+            <div class="custom-item__flags">
+              <el-checkbox
+                :model-value="column.custom?.intoGross ?? true"
+                size="small"
+                @update:model-value="
+                  (value: boolean) => onCustomFlagChange(column, 'intoGross', value)
+                "
+              >
+                计入应发
+              </el-checkbox>
+              <el-checkbox
+                :model-value="column.custom?.taxable ?? true"
+                size="small"
+                :disabled="!column.custom?.intoGross"
+                @update:model-value="
+                  (value: boolean) => onCustomFlagChange(column, 'taxable', value)
+                "
+              >
+                并入综合所得
+              </el-checkbox>
+              <el-checkbox
+                :model-value="column.custom?.intoBase ?? false"
+                size="small"
+                :disabled="!column.custom?.intoGross"
+                @update:model-value="
+                  (value: boolean) => onCustomFlagChange(column, 'intoBase', value)
+                "
+              >
+                计入缴费基数
+              </el-checkbox>
+            </div>
+          </li>
+        </ul>
+        <p class="custom-tip">
+          自定义列的金额在明细页点击对应月份填写；未勾选「计入应发」时该列仅作展示，不影响工资计算
+        </p>
+      </section>
     </div>
   </el-drawer>
 </template>
@@ -333,5 +429,61 @@ function onSelectAll() {
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
+}
+
+.custom-panel {
+  flex: none;
+}
+
+.custom-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.custom-add__input {
+  max-width: 260px;
+}
+
+.custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.custom-item {
+  padding: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.custom-item__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-item__name {
+  flex: 1;
+}
+
+.custom-item__flags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.custom-tip {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>
