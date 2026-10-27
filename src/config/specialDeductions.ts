@@ -1,0 +1,142 @@
+/**
+ * @Author: wj
+ * @FilePath: src/config/specialDeductions.ts
+ * @Description: 专项附加扣除与其他扣除的项目录与标准额度配置
+ */
+import type { DeductionKey, DeductionMeta } from '@/types'
+
+/** 扣除项目录：标准金额与上限随政策调整，集中在此维护 */
+export const DEDUCTION_CATALOG: Record<DeductionKey, DeductionMeta> = {
+  infantCare: {
+    key: 'infantCare',
+    label: '3 岁以下婴幼儿照护',
+    defaultAmount: 2000,
+    period: 'monthly',
+    splittable: true,
+    limit: 0,
+    settlementOnly: false,
+    hint: '每个婴幼儿每月 2000 元，父母可选择一方全额扣除或双方各扣 50%',
+  },
+  childrenEducation: {
+    key: 'childrenEducation',
+    label: '子女教育',
+    defaultAmount: 2000,
+    period: 'monthly',
+    splittable: true,
+    limit: 0,
+    settlementOnly: false,
+    hint: '每个子女每月 2000 元，覆盖学前教育至高等教育',
+  },
+  continuingEducationDegree: {
+    key: 'continuingEducationDegree',
+    label: '继续教育（学历）',
+    defaultAmount: 400,
+    period: 'monthly',
+    splittable: false,
+    limit: 0,
+    settlementOnly: false,
+    hint: '学历继续教育每月 400 元，同一学历最长扣除 48 个月',
+  },
+  continuingEducationCert: {
+    key: 'continuingEducationCert',
+    label: '继续教育（职业资格）',
+    defaultAmount: 3600,
+    period: 'annual',
+    splittable: false,
+    limit: 3600,
+    settlementOnly: false,
+    hint: '取得技能人员/专业技术人员职业资格证书当年一次性扣除 3600 元',
+  },
+  housingLoan: {
+    key: 'housingLoan',
+    label: '住房贷款利息',
+    defaultAmount: 1000,
+    period: 'monthly',
+    splittable: true,
+    limit: 0,
+    settlementOnly: false,
+    exclusiveGroup: 'housing',
+    hint: '首套住房贷款每月 1000 元，最长 240 个月；与住房租金不可同时享受',
+  },
+  housingRent: {
+    key: 'housingRent',
+    label: '住房租金',
+    defaultAmount: 1500,
+    period: 'monthly',
+    splittable: false,
+    limit: 0,
+    settlementOnly: false,
+    exclusiveGroup: 'housing',
+    hint: '按城市分档 1500 / 1100 / 800 元；与住房贷款利息不可同时享受',
+  },
+  elderlySupport: {
+    key: 'elderlySupport',
+    label: '赡养老人',
+    defaultAmount: 3000,
+    period: 'monthly',
+    splittable: true,
+    limit: 3000,
+    sharedLimit: 1500,
+    settlementOnly: false,
+    hint: '独生子女每月 3000 元；勾选「由本人全额扣除」取消勾选后按分摊口径，每人不超过 1500 元',
+  },
+  seriousIllness: {
+    key: 'seriousIllness',
+    label: '大病医疗',
+    defaultAmount: 0,
+    period: 'annual',
+    splittable: false,
+    limit: 80000,
+    // 医保目录内个人自付累计超过 15000 元的部分才可扣除，此处填自付总额
+    threshold: 15000,
+    settlementOnly: true,
+    hint: '填写医保目录内个人自付总额，系统自动扣除 15000 元起扣线，年度限额 80000 元，仅年度汇算时扣除',
+  },
+  personalPension: {
+    key: 'personalPension',
+    label: '个人养老金',
+    defaultAmount: 12000,
+    period: 'annual',
+    splittable: false,
+    limit: 12000,
+    settlementOnly: false,
+    hint: '按实际缴存额扣除，年度限额 12000 元',
+  },
+  commercialHealth: {
+    key: 'commercialHealth',
+    label: '商业健康险',
+    defaultAmount: 2400,
+    period: 'annual',
+    splittable: false,
+    limit: 2400,
+    settlementOnly: false,
+    hint: '税优健康险年度限额 2400 元',
+  },
+  donation: {
+    key: 'donation',
+    label: '公益捐赠',
+    defaultAmount: 0,
+    period: 'annual',
+    splittable: false,
+    limit: 0,
+    // 公益性捐赠扣除额不得超过应纳税所得额的 30%，需结合当年所得动态计算
+    ratioLimit: 0.3,
+    settlementOnly: false,
+    hint: '公益性捐赠在应纳税所得额 30% 以内扣除；符合特定条件的全额扣除项目请改用手动口径',
+  },
+}
+
+/** 按目录顺序输出，保证 UI 展示顺序稳定 */
+export const DEDUCTION_LIST: DeductionMeta[] = [
+  'infantCare',
+  'childrenEducation',
+  'continuingEducationDegree',
+  'continuingEducationCert',
+  'housingLoan',
+  'housingRent',
+  'elderlySupport',
+  'seriousIllness',
+  'personalPension',
+  'commercialHealth',
+  'donation',
+].map((key) => DEDUCTION_CATALOG[key as DeductionKey])

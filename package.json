@@ -1,0 +1,39 @@
+{
+  "name": "salary-calculator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "全链路薪资计算器",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "@vueuse/core": "^12.5.0",
+    "dayjs": "^1.11.13",
+    "decimal.js": "^10.4.3",
+    "echarts": "^5.5.1",
+    "element-plus": "^2.9.1",
+    "pinia": "^3.0.1",
+    "pinia-plugin-persistedstate": "^4.2.0",
+    "sortablejs": "^1.15.6",
+    "vue": "^3.5.13",
+    "vue-echarts": "^7.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/sortablejs": "^1.15.8",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^21.0.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^2.2.0"
+  }
+}

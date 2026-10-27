@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+coverage
+tests/e2e/test-results
+tests/e2e/playwright-report
+*.log
