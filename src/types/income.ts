@@ -9,11 +9,14 @@ import type { StageType } from './stage'
 export type IncomeCycle = 'monthly' | 'once'
 
 /**
- * 收入类别：
- * - salary 走工资薪金「累计预扣预缴」逻辑
- * - bonus 走全年一次性奖金逻辑，可在单独计税与并入综合所得之间切换
+ * 收入类别（对应综合所得的四个税目）：
+ * - salary 工资薪金：累计预扣预缴
+ * - bonus 全年一次性奖金：可在单独计税与并入综合所得之间切换
+ * - labor 劳务报酬：按次减除费用后适用 20%/30%/40% 预扣率
+ * - authorship 稿酬：按次减除费用后减征 30%，预扣率 20%
+ * - royalty 特许权使用费：按次减除费用后预扣率 20%
  */
-export type IncomeKind = 'salary' | 'bonus'
+export type IncomeKind = 'salary' | 'bonus' | 'labor' | 'authorship' | 'royalty'
 
 export interface IncomeItem {
   /** 唯一标识，同时作为动态表格列的 key */
@@ -36,4 +39,13 @@ export interface IncomeItem {
   stageAmounts: Partial<Record<StageType, number>>
   /** 各阶段是否发放；福利项常只在转正后才有，缺省视为发放 */
   stageEnabled: Partial<Record<StageType, boolean>>
+  /**
+   * 非现金福利：计入应发与应纳税所得额，但不计入到手
+   * 如仅限食堂消费的餐补饭票、购物卡、宿舍等，员工拿不到现金却要为此纳税
+   */
+  nonCash: boolean
+  /** 每月金额是否不同；开启后按 monthlyAmounts 逐月取值，如按出勤浮动的餐补 */
+  variableByMonth: boolean
+  /** 逐月金额表，长度 12，下标 0-11 对应 1-12 月；缺省月份回落到阶段/通用金额 */
+  monthlyAmounts?: number[]
 }

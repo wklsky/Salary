@@ -40,6 +40,12 @@ export function resolveColumnValue(
       return row.comprehensiveIncome
     case 'taxFreeIncome':
       return row.taxFreeIncome
+    case 'nonCashIncome':
+      return row.nonCashIncome
+    case 'otherIncome':
+      return row.otherIncome
+    case 'otherTax':
+      return row.otherTax
     case 'insuranceBase':
       return row.insuranceBase
     case 'insurancePersonal':

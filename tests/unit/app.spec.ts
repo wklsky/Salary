@@ -93,7 +93,11 @@ describe('应用挂载冒烟', () => {
     expect(annual.net).toBeGreaterThan(0)
     expect(annual.net).toBeLessThan(annual.gross)
     expect(annual.companyCost).toBeGreaterThan(annual.gross)
-    // 到手 + 个人社保 + 个税 应恒等于应发
-    expect(annual.net + annual.insurancePersonal + annual.tax).toBeCloseTo(annual.gross, 1)
+    // 到手 + 个人社保 + 个税 + 非现金福利（饭票等）应恒等于应发
+    expect(
+      annual.net + annual.insurancePersonal + annual.tax + annual.nonCashIncome,
+    ).toBeCloseTo(annual.gross, 1)
+    // 默认示例含餐补饭票，验证非现金福利确实被排除在到手之外
+    expect(annual.nonCashIncome).toBeGreaterThan(0)
   })
 })

@@ -34,7 +34,10 @@ const incomeRows = computed(() => {
       const annual = annualByItem[item.id] ?? 0
       return {
         name: item.name,
-        cycle: item.cycle === 'monthly' ? '逐月' : `${item.month} 月一次性`,
+        cycle:
+          (item.cycle === 'monthly' ? '逐月' : `${item.month} 月一次性`) +
+          (item.variableByMonth ? '·各月不同' : '') +
+          (item.nonCash ? '·非现金' : ''),
         annual,
         ratio: round2(annual / (result.value.annual.gross || 1)),
       }
@@ -104,6 +107,24 @@ const deductionRows = computed(() => {
       amount: annual.tax,
       note: `预扣预缴口径，实际税负 ${formatPercent(annual.taxRate)}`,
     },
+    ...(annual.otherTax > 0
+      ? [
+          {
+            name: '额外收入预扣税',
+            amount: annual.otherTax,
+            note: `劳务报酬/稿酬/特许权使用费按次预扣，汇算收入额 ¥${formatMoney(annual.otherIncome)}`,
+          },
+        ]
+      : []),
+    ...(annual.nonCashIncome > 0
+      ? [
+          {
+            name: '非现金福利（不计入到手）',
+            amount: annual.nonCashIncome,
+            note: '饭票、购物卡等，含在应发中并已计税，但员工拿不到现金',
+          },
+        ]
+      : []),
     ...(Math.abs(annual.settlementDiff) >= 0.01
       ? [
           {

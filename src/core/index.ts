@@ -16,7 +16,7 @@ import { MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { bonusTaxSeparate, findInvalidRange } from './bonus'
 import { computeInsuranceMonthly } from './insurance'
 import { dec, round2, sumMoney } from './money'
-import { amountOfStage, stageTypeOfMonth } from './stage'
+import { amountOfMonth, stageTypeOfMonth } from './stage'
 import { computeSettlement, runMonthlyEngine } from './tax'
 
 /** 汇总各险种全年缴纳额，供占比分析使用 */
@@ -41,7 +41,7 @@ function collectBonusItems(input: SalaryInput): BonusItem[] {
     .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
     .map((item) => ({
       id: item.id,
-      amount: amountOfStage(item, stageTypeOfMonth(input.stages, item.month)),
+      amount: amountOfMonth(item, item.month, stageTypeOfMonth(input.stages, item.month)),
     }))
     .filter((item) => item.amount > 0)
     .sort((a, b) => b.amount - a.amount)
@@ -104,7 +104,7 @@ export function calculateSalary(input: SalaryInput): SalaryResult {
   const bonusAmount = sumMoney(
     input.incomes
       .filter((item) => item.enabled && item.kind === 'bonus')
-      .map((item) => amountOfStage(item, stageTypeOfMonth(input.stages, item.month))),
+      .map((item) => amountOfMonth(item, item.month, stageTypeOfMonth(input.stages, item.month))),
   )
 
   const isResident = input.taxpayerType !== 'nonResident'
@@ -160,17 +160,23 @@ export function calculateSalary(input: SalaryInput): SalaryResult {
   const monthsWorked = Math.max(0, input.endMonth - input.startMonth + 1)
   const settlement = computeSettlement({
     comprehensiveIncome: chosen.comprehensiveIncome,
+    // 劳务报酬等额外收入与工资薪金合并后适用年度税率表
+    otherIncome: chosen.otherIncomeAnnual,
     insurancePersonal: chosen.insurancePersonal,
     deductionAll: chosen.deductionAnnualAll,
     donation: chosen.donationDeclaredAnnual,
     monthsWorked,
     comprehensiveWithheld: chosen.comprehensiveWithheld,
+    otherWithheld: chosen.otherTaxAnnual,
   })
 
   const annual: AnnualSummary = {
     gross: chosen.gross,
     comprehensiveIncome: chosen.comprehensiveIncome,
     taxFreeIncome: chosen.taxFreeIncome,
+    nonCashIncome: chosen.nonCashIncome,
+    otherTax: chosen.otherTax,
+    otherIncome: chosen.otherIncome,
     insurancePersonal: chosen.insurancePersonal,
     insuranceCompany: chosen.insuranceCompany,
     companyCost: chosen.companyCost,
@@ -216,10 +222,22 @@ export { computeInsuranceMonthly, resolveCity, resolveBaseIncome, resolveRawBase
 export { bonusTaxSeparate, bonusInvalidRanges, findInvalidRange, taxByBrackets } from './bonus'
 export { runMonthlyEngine, computeSettlement } from './tax'
 export {
+  otherIncomeAmount,
+  otherIncomeExpense,
+  otherIncomeTax,
+  otherIncomeTaxable,
+  isOtherIncomeKind,
+  OTHER_INCOME_KINDS,
+  OTHER_INCOME_LABELS,
+  OTHER_INCOME_HINTS,
+} from './otherIncome'
+export {
+  amountOfMonth,
   amountOfStage,
   stageTypeOfMonth,
   resolveStageOfMonth,
   isInsuranceSkipped,
   isItemEnabledInStage,
+  skippedInsuranceTypesOfMonth,
 } from './stage'
 export * from './money'

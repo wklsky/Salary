@@ -11,6 +11,10 @@ import {
   computeInsuranceMonthly,
   findInvalidRange,
   isItemEnabledInStage,
+  otherIncomeAmount,
+  otherIncomeTax,
+  otherIncomeTaxable,
+  skippedInsuranceTypesOfMonth,
 } from '@/core'
 import { createDefaultStages, validateStages } from '@/config/stages'
 import { DEDUCTION_KEYS } from '@/types'
@@ -40,6 +44,9 @@ function makeIncome(overrides: Partial<IncomeItem> = {}): IncomeItem {
     staged: overrides.staged ?? false,
     stageAmounts: overrides.stageAmounts ?? {},
     stageEnabled: overrides.stageEnabled ?? {},
+    nonCash: overrides.nonCash ?? false,
+    variableByMonth: overrides.variableByMonth ?? false,
+    monthlyAmounts: overrides.monthlyAmounts,
   }
 }
 
@@ -100,8 +107,9 @@ function makeStage(
   fromMonth: number,
   toMonth: number,
   skipInsurance = false,
+  skipInsuranceTypes: InsuranceType[] = [],
 ): StageRange {
-  return { id: `stage_${type}_${fromMonth}`, type, fromMonth, toMonth, skipInsurance }
+  return { id: `stage_${type}_${fromMonth}`, type, fromMonth, toMonth, skipInsurance, skipInsuranceTypes }
 }
 
 describe('五险一金缴费基数', () => {
@@ -325,6 +333,52 @@ describe('雇佣阶段', () => {
     expect(result.insuranceMonthly[0]?.base).toBe(15000)
   })
 
+  it('阶段可单独停缴指定险种（试用期只缴五险）', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })],
+      insurance: makeInsurance({ clampEnabled: false, items: allItemsEnabled() }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [
+        makeStage('probation', 1, 3, false, ['housingFund']),
+        makeStage('regular', 4, 12),
+      ],
+    })
+    // 试用期公积金个人与单位均为 0，五险照常缴纳
+    expect(detail[0]?.personal.housingFund).toBe(0)
+    expect(detail[0]?.company.housingFund).toBe(0)
+    expect(detail[0]?.personal.pension).toBeGreaterThan(0)
+    // 转正后恢复缴纳公积金
+    expect(detail[3]?.personal.housingFund).toBeGreaterThan(0)
+    expect(detail[3]?.company.housingFund).toBeGreaterThan(0)
+  })
+
+  it('阶段整体不缴时明细归零', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })],
+      insurance: makeInsurance({ clampEnabled: false, items: allItemsEnabled() }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [makeStage('intern', 1, 3, true, ['housingFund'])],
+    })
+    expect(detail[0]?.personalTotal).toBe(0)
+    expect(detail[0]?.companyTotal).toBe(0)
+    expect(detail[0]?.base).toBe(0)
+  })
+
+  it('解析阶段停缴险种', () => {
+    const stages = [
+      makeStage('probation', 1, 3, false, ['housingFund']),
+      makeStage('regular', 4, 12),
+    ]
+    expect(skippedInsuranceTypesOfMonth(stages, 2)).toEqual(['housingFund'])
+    expect(skippedInsuranceTypesOfMonth(stages, 5)).toEqual([])
+    // 整体不缴的月份覆盖全部险种
+    expect(skippedInsuranceTypesOfMonth([makeStage('intern', 1, 2, true)], 1)).toHaveLength(
+      INSURANCE_TYPES.length,
+    )
+  })
+
   it('缴费基数随阶段工资变化', () => {
     const result = calculateSalary(
       makeInput({
@@ -510,6 +564,245 @@ describe('边界与异常', () => {
       makeInput({ insurance: makeInsurance({ cityCode: 'not-exist' }) }),
     )
     expect(result.monthly).toHaveLength(12)
+  })
+})
+
+describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
+  it('劳务报酬不超过 4000 元按次减除 800 元', () => {
+    // 3000 − 800 = 2200，20% 预扣
+    expect(otherIncomeTax('labor', 3000)).toBe(440)
+    expect(otherIncomeTaxable(3000)).toBe(2200)
+  })
+
+  it('劳务报酬超过 4000 元按次减除 20%', () => {
+    // 10000 × 80% = 8000，20% 预扣
+    expect(otherIncomeTax('labor', 10000)).toBe(1600)
+    expect(otherIncomeAmount('labor', 10000)).toBe(8000)
+  })
+
+  it('劳务报酬适用三级累进预扣率', () => {
+    // 60000 × 80% = 48000，30% 档速算扣除 2000
+    expect(otherIncomeTaxable(60000)).toBe(48000)
+    expect(otherIncomeTax('labor', 60000)).toBe(12400)
+    // 100000 × 80% = 80000，40% 档速算扣除 7000
+    expect(otherIncomeTax('labor', 100000)).toBe(25000)
+  })
+
+  it('稿酬减征 30% 后按 20% 预扣', () => {
+    // 5000 × 80% = 4000，减征后收入额 2800，预扣 560
+    expect(otherIncomeAmount('authorship', 5000)).toBe(2800)
+    expect(otherIncomeTax('authorship', 5000)).toBe(560)
+  })
+
+  it('特许权使用费按 20% 预扣', () => {
+    expect(otherIncomeTax('royalty', 5000)).toBe(800)
+  })
+
+  it('额外收入按次预扣，不并入工资薪金累计预扣', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 5000 }),
+          makeIncome({
+            id: 'labor',
+            name: '劳务报酬',
+            amount: 10000,
+            cycle: 'once',
+            month: 6,
+            kind: 'labor',
+          }),
+        ],
+      }),
+    )
+    // 工资 5000 未超过减除费用，全年无工资薪金个税
+    expect(result.annual.tax).toBe(1600)
+    expect(result.monthly[5]?.otherTax).toBe(1600)
+    expect(result.monthly[5]?.tax).toBe(0)
+    expect(result.monthly[5]?.otherIncome).toBe(8000)
+    // 到手 = 5000 + 10000 − 1600 预扣（社保为 0）
+    expect(result.monthly[5]?.net).toBe(13400)
+  })
+
+  it('额外收入在汇算时并入综合所得，多预扣的部分退税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 5000 }),
+          makeIncome({
+            id: 'labor',
+            amount: 10000,
+            cycle: 'once',
+            month: 6,
+            kind: 'labor',
+          }),
+        ],
+      }),
+    )
+    // 汇算：工资 60000 − 60000 = 0，并入劳务收入额 8000 → 3% = 240
+    expect(result.annual.otherIncome).toBe(8000)
+    expect(result.annual.settlementTax).toBe(240)
+    // 已预扣 1600，应退 1360
+    expect(result.annual.settlementDiff).toBe(-1360)
+  })
+
+  it('免税的额外收入不产生预扣税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({
+            id: 'labor',
+            amount: 10000,
+            cycle: 'once',
+            month: 6,
+            kind: 'labor',
+            taxable: false,
+          }),
+        ],
+      }),
+    )
+    expect(result.annual.otherTax).toBe(0)
+    expect(result.annual.otherIncome).toBe(0)
+    // 免税部分计入免税收入而非综合所得
+    expect(result.annual.taxFreeIncome).toBe(10000)
+  })
+
+  it('非居民个人的额外收入按减除费用后的收入额并入当月计税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 10000 }),
+          makeIncome({ id: 'labor', amount: 10000, cycle: 'once', month: 3, kind: 'labor' }),
+        ],
+        taxpayerType: 'nonResident',
+      }),
+    )
+    // 3 月：工资 10000 + 劳务收入额 8000 − 5000 = 13000，按月换算表 20% 档速算 1410
+    expect(result.monthly[2]?.otherIncome).toBe(8000)
+    expect(result.monthly[2]?.tax).toBe(1190)
+  })
+})
+
+describe('非现金福利与逐月金额', () => {
+  it('饭票计入应发与应税，但不计入到手', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 15000 }),
+          makeIncome({ id: 'meal', name: '餐补饭票', amount: 800, nonCash: true }),
+        ],
+      }),
+    )
+    // 应发含饭票
+    expect(result.monthly[0]?.gross).toBe(15800)
+    expect(result.monthly[0]?.comprehensiveIncome).toBe(15800)
+    // 应纳税所得额 15800 − 5000 = 10800，个税 324；到手 15800 − 324 − 800 饭票
+    expect(result.monthly[0]?.tax).toBe(324)
+    expect(result.monthly[0]?.nonCashIncome).toBe(800)
+    expect(result.monthly[0]?.net).toBe(14676)
+    expect(result.annual.nonCashIncome).toBe(9600)
+  })
+
+  it('非现金福利不计入到手时仍按应发计税', () => {
+    const withMeal = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 15000 }),
+          makeIncome({ id: 'meal', amount: 800, nonCash: true }),
+        ],
+      }),
+    )
+    const cashOnly = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 15000 }),
+          makeIncome({ id: 'meal', amount: 800, nonCash: false }),
+        ],
+      }),
+    )
+    // 两者计税结果一致，差别只在到手
+    expect(withMeal.annual.tax).toBe(cashOnly.annual.tax)
+    expect(withMeal.annual.net).toBe(cashOnly.annual.net - 9600)
+  })
+
+  it('每月金额不同时按逐月金额发放', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({
+            id: 'meal',
+            amount: 800,
+            variableByMonth: true,
+            monthlyAmounts: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200],
+          }),
+        ],
+      }),
+    )
+    expect(result.monthly[0]?.gross).toBe(100)
+    expect(result.monthly[11]?.gross).toBe(1200)
+    expect(result.annual.gross).toBe(7800)
+  })
+
+  it('阶段停发优先于逐月金额', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({
+            id: 'meal',
+            amount: 800,
+            staged: true,
+            stageEnabled: { intern: false, regular: true },
+            stageAmounts: { intern: 800, regular: 800 },
+            variableByMonth: true,
+            monthlyAmounts: Array(12).fill(500),
+          }),
+        ],
+        stages: [makeStage('intern', 1, 3), makeStage('regular', 4, 12)],
+      }),
+    )
+    expect(result.monthly[0]?.gross).toBe(0)
+    expect(result.monthly[3]?.gross).toBe(500)
+  })
+
+  it('逐月金额影响计入缴费基数的收入', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [
+        makeIncome({
+          id: 'salary',
+          amount: 15000,
+          intoInsuranceBase: true,
+          variableByMonth: true,
+          monthlyAmounts: [10000, 20000, 15000, 15000, 15000, 15000, 15000, 15000, 15000, 15000, 15000, 15000],
+        }),
+      ],
+      insurance: makeInsurance({ clampEnabled: false }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [],
+    })
+    expect(detail[0]?.base).toBe(10000)
+    expect(detail[1]?.base).toBe(20000)
+  })
+
+  it('缺少非现金与逐月字段的历史存档按现金固定额处理', () => {
+    const legacy = {
+      id: 'legacy',
+      name: '餐补',
+      amount: 800,
+      cycle: 'monthly',
+      month: 1,
+      intoInsuranceBase: false,
+      taxable: true,
+      kind: 'salary',
+      enabled: true,
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
+    } as unknown as IncomeItem
+
+    const result = calculateSalary(makeInput({ incomes: [legacy] }))
+    expect(result.monthly[0]?.gross).toBe(800)
+    expect(result.monthly[0]?.nonCashIncome).toBe(0)
+    expect(result.monthly[0]?.net).toBe(800)
   })
 })
 

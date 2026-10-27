@@ -14,7 +14,7 @@ export const STAGE_LABELS: Record<StageType, string> = {
 
 export const STAGE_HINTS: Record<StageType, string> = {
   intern: '未正式建立劳动关系，通常按劳务/实习津贴发放，多数单位不缴纳五险一金',
-  probation: '已建立劳动关系，试用期工资可低于转正工资但不得低于转正工资的 80%',
+  probation: '已建立劳动关系，试用期工资不得低于转正工资的 80%；部分单位试用期只缴五险',
   regular: '转正后的标准发放口径',
 }
 
@@ -28,7 +28,15 @@ export const MAX_MONTH = 12
 export function createDefaultStages(): StageRange[] {
   return [
     { id: createId('stage'), type: 'intern', fromMonth: 1, toMonth: 2, skipInsurance: true },
-    { id: createId('stage'), type: 'probation', fromMonth: 3, toMonth: 5, skipInsurance: false },
+    {
+      id: createId('stage'),
+      type: 'probation',
+      fromMonth: 3,
+      toMonth: 5,
+      skipInsurance: false,
+      // 试用期只缴五险、转正后才缴公积金，是常见的实际做法
+      skipInsuranceTypes: ['housingFund'],
+    },
     { id: createId('stage'), type: 'regular', fromMonth: 6, toMonth: MAX_MONTH, skipInsurance: false },
   ]
 }
@@ -42,6 +50,7 @@ export function createStage(type: StageType, fromMonth: number): StageRange {
     toMonth: MAX_MONTH,
     // 实习期默认不缴纳五险一金，其余阶段默认缴纳
     skipInsurance: type === 'intern',
+    skipInsuranceTypes: [],
   }
 }
 

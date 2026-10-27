@@ -16,7 +16,7 @@ import type {
   StageType,
 } from '@/types'
 import { INSURANCE_TYPES } from '@/types'
-import { amountOfStage, isInsuranceSkipped, stageTypeOfMonth } from './stage'
+import { amountOfMonth, skippedInsuranceTypesOfMonth, stageTypeOfMonth } from './stage'
 import { clampNumber, dec, round0, round2, sumMoney } from './money'
 
 /** 城市政策查找：未命中时使用兜底政策，保证计算不中断 */
@@ -42,17 +42,19 @@ export function emptyAmountMap(): InsuranceAmountMap {
 export function resolveBaseIncome(
   incomes: IncomeItem[],
   stage: StageType = FALLBACK_STAGE,
+  month = 1,
 ): { monthly: number; onceMonthly: number } {
   const enabled = incomes.filter((item) => item.enabled)
+  // 逐月项按当月金额取值，一次性项按其发放月份取值后摊薄
+  const amountOf = (item: IncomeItem) =>
+    amountOfMonth(item, item.cycle === 'monthly' ? month : item.month, stage)
   const monthly = sumMoney(
     enabled
       .filter((item) => item.cycle === 'monthly' && item.intoInsuranceBase)
-      .map((item) => amountOfStage(item, stage)),
+      .map(amountOf),
   )
   const once = sumMoney(
-    enabled
-      .filter((item) => item.cycle === 'once' && item.intoInsuranceBase)
-      .map((item) => amountOfStage(item, stage)),
+    enabled.filter((item) => item.cycle === 'once' && item.intoInsuranceBase).map(amountOf),
   )
   return { monthly, onceMonthly: round2(dec(once).div(12)) }
 }
@@ -137,14 +139,15 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     }
 
     // 实习期等阶段未建立社保关系，同样不产生缴纳
-    if (isInsuranceSkipped(params.stages, month)) {
+    const skippedTypes = skippedInsuranceTypesOfMonth(params.stages, month)
+    if (skippedTypes.length >= INSURANCE_TYPES.length) {
       result.push(buildEmptyDetail(month))
       continue
     }
 
-    // 基数按当月所处阶段解析，使试用期与转正后可以采用不同的缴费基数
+    // 基数按当月所处阶段与当月金额解析，使试用期与转正后可以采用不同的缴费基数
     const stage = stageTypeOfMonth(params.stages, month)
-    const baseIncome = resolveBaseIncome(params.incomes, stage)
+    const baseIncome = resolveBaseIncome(params.incomes, stage, month)
     const rawBase = resolveRawBase(params.insurance, city, baseIncome)
     const housingRawBase = resolveHousingFundRawBase(
       params.insurance,
@@ -164,6 +167,8 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     const company = emptyAmountMap()
 
     INSURANCE_TYPES.forEach((type: InsuranceType) => {
+      // 该阶段停缴此险种，如试用期不缴公积金
+      if (skippedTypes.includes(type)) return
       const itemConfig = params.insurance.items[type]
       if (!itemConfig?.enabled) return
       const rate = itemConfig.rate ?? city.rates[type]

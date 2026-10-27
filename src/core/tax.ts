@@ -11,7 +11,8 @@ import type { InsuranceMonthDetail, MonthlyResult } from '@/types'
 import type { StageRange, TaxpayerType } from '@/types'
 import { ANNUAL_TAX_BRACKETS, MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { DEDUCTION_CATALOG } from '@/config/specialDeductions'
-import { amountOfStage, stageTypeOfMonth } from './stage'
+import { isOtherIncomeKind, otherIncomeAmount, otherIncomeTax } from './otherIncome'
+import { amountOfMonth, amountOfStage, stageTypeOfMonth } from './stage'
 import { bonusTaxSeparate, taxByBrackets } from './bonus'
 import { dec, nonNegative, round2, sumMoney } from './money'
 
@@ -47,6 +48,10 @@ export interface EngineResult extends AnnualSnapshot {
   deductionAnnual: number
   /** 全年专项附加扣除合计（含仅汇算扣除项） */
   deductionAnnualAll: number
+  /** 全年额外收入（劳务报酬/稿酬/特许权使用费）的汇算口径收入额 */
+  otherIncomeAnnual: number
+  /** 全年额外收入已预扣税额 */
+  otherTaxAnnual: number
   /** 全年申报的公益捐赠额（已过上限，未考虑比例限额） */
   donationDeclaredAnnual: number
   /** 全年实际可扣除的公益捐赠额，受应纳税所得额比例限额约束 */
@@ -57,11 +62,17 @@ interface MonthIncome {
   gross: number
   comprehensive: number
   taxFree: number
+  /** 非现金福利额（饭票、购物卡等），计入应发与应税但不计入到手 */
+  nonCash: number
+  /** 额外收入（劳务报酬/稿酬/特许权使用费）按次预扣的税额 */
+  otherTax: number
+  /** 额外收入的汇算口径收入额，减除费用后（稿酬再减征 30%） */
+  otherIncome: number
   /** 各收入项当月金额，key 为 IncomeItem.id */
   breakdown: Record<string, number>
 }
 
-/** 汇总当月收入：区分应发总额、并入综合所得部分与免税部分 */
+/** 汇总当月收入：区分应发总额、并入综合所得部分、免税部分与非现金福利 */
 function incomeOfMonth(
   incomes: IncomeItem[],
   month: number,
@@ -76,7 +87,15 @@ function incomeOfMonth(
     breakdown[item.id] = 0
   })
 
-  const zero: MonthIncome = { gross: 0, comprehensive: 0, taxFree: 0, breakdown }
+  const zero: MonthIncome = {
+    gross: 0,
+    comprehensive: 0,
+    taxFree: 0,
+    nonCash: 0,
+    otherTax: 0,
+    otherIncome: 0,
+    breakdown,
+  }
   // 入职前与离职后均无收入
   if (month < startMonth || month > endMonth) return zero
 
@@ -84,13 +103,29 @@ function incomeOfMonth(
 
   let gross = 0
   let comprehensive = 0
+  let taxFree = 0
+  let nonCash = 0
+  let otherTax = 0
+  let otherIncome = 0
   enabled.forEach((item) => {
-    const monthlyAmount = amountOfStage(item, stage)
+    const monthlyAmount = amountOfMonth(item, month, stage)
     const paid = item.cycle === 'monthly' ? monthlyAmount : item.month === month ? monthlyAmount : 0
     if (paid <= 0) return
     gross = round2(dec(gross).plus(paid))
     breakdown[item.id] = round2(dec(breakdown[item.id]).plus(paid))
-    if (!item.taxable) return
+    // 饭票等非现金福利员工拿不到钱，从到手中剔除，但仍计入应发与应税
+    if (item.nonCash) nonCash = round2(dec(nonCash).plus(paid))
+    if (!item.taxable) {
+      taxFree = round2(dec(taxFree).plus(paid))
+      return
+    }
+
+    // 劳务报酬等额外收入按次预扣，不并入工资薪金累计预扣，汇算时才并入综合所得
+    if (isOtherIncomeKind(item.kind)) {
+      otherTax = round2(dec(otherTax).plus(otherIncomeTax(item.kind, paid)))
+      otherIncome = round2(dec(otherIncome).plus(otherIncomeAmount(item.kind, paid)))
+      return
+    }
 
     // 单独计税的部分不并入综合所得，其余并入
     const separateAmount =
@@ -101,7 +136,10 @@ function incomeOfMonth(
   return {
     gross,
     comprehensive,
-    taxFree: round2(dec(gross).minus(comprehensive)),
+    taxFree,
+    nonCash,
+    otherTax,
+    otherIncome,
     breakdown,
   }
 }
@@ -215,10 +253,13 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
   let grossAnnual = 0
   let comprehensiveAnnual = 0
   let taxFreeAnnual = 0
+  let nonCashAnnual = 0
   let insurancePersonalAnnual = 0
   let insuranceCompanyAnnual = 0
   let taxAnnual = 0
   let bonusTaxAnnual = 0
+  let otherTaxAnnual = 0
+  let otherIncomeAnnual = 0
   let netAnnual = 0
   let deductionMonthlyAnnual = 0
   let deductionAllAnnual = 0
@@ -284,8 +325,14 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       if (currentTax > 0) cumTaxPaid = round2(dec(cumTaxPaid).plus(currentTax))
     } else {
       // 非居民个人以每月收入额减除费用后的余额为应纳税所得额，适用按月换算税率表
+      // 劳务报酬等额外收入按减除费用后的收入额并入当月
       const monthlyTaxable = nonNegative(
-        round2(dec(income.comprehensive).minus(insurance.personalTotal).minus(basicDeduction)),
+        round2(
+          dec(income.comprehensive)
+            .plus(income.otherIncome)
+            .minus(insurance.personalTotal)
+            .minus(basicDeduction),
+        ),
       )
       taxableIncome = monthlyTaxable
       const raw = round2(
@@ -307,18 +354,27 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
           ctx.stages,
         )
       : 0
-    const taxTotal = round2(dec(currentTax).plus(bonusTax))
+    const taxTotal = round2(dec(currentTax).plus(bonusTax).plus(income.otherTax))
+    // 到手 = 应发 − 五险一金个人 − 个税（含额外收入预扣）− 非现金福利
     const net = round2(
-      dec(income.gross).minus(insurance.personalTotal).minus(currentTax).minus(bonusTax),
+      dec(income.gross)
+        .minus(insurance.personalTotal)
+        .minus(currentTax)
+        .minus(bonusTax)
+        .minus(income.otherTax)
+        .minus(income.nonCash),
     )
 
     grossAnnual = round2(dec(grossAnnual).plus(income.gross))
     comprehensiveAnnual = round2(dec(comprehensiveAnnual).plus(income.comprehensive))
     taxFreeAnnual = round2(dec(taxFreeAnnual).plus(income.taxFree))
+    nonCashAnnual = round2(dec(nonCashAnnual).plus(income.nonCash))
     insurancePersonalAnnual = round2(dec(insurancePersonalAnnual).plus(insurance.personalTotal))
     insuranceCompanyAnnual = round2(dec(insuranceCompanyAnnual).plus(insurance.companyTotal))
     taxAnnual = round2(dec(taxAnnual).plus(currentTax))
     bonusTaxAnnual = round2(dec(bonusTaxAnnual).plus(bonusTax))
+    otherTaxAnnual = round2(dec(otherTaxAnnual).plus(income.otherTax))
+    otherIncomeAnnual = round2(dec(otherIncomeAnnual).plus(income.otherIncome))
     netAnnual = round2(dec(netAnnual).plus(net))
     deductionMonthlyAnnual = round2(dec(deductionMonthlyAnnual).plus(deductionTotal))
     deductionAllAnnual = round2(dec(deductionAllAnnual).plus(deductionAll))
@@ -330,6 +386,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       gross: income.gross,
       comprehensiveIncome: income.comprehensive,
       taxFreeIncome: income.taxFree,
+      nonCashIncome: income.nonCash,
       insuranceBase: insurance.base,
       insurancePersonal: insurance.personalTotal,
       insuranceCompany: insurance.companyTotal,
@@ -340,6 +397,8 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       cumulativeTaxPaid: cumTaxPaid,
       tax: currentTax,
       bonusTax,
+      otherTax: income.otherTax,
+      otherIncome: income.otherIncome,
       taxTotal,
       net,
     })
@@ -350,6 +409,8 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
     comprehensiveWithheld: cumTaxPaid,
     deductionAnnual: deductionMonthlyAnnual,
     deductionAnnualAll: deductionAllAnnual,
+    otherIncomeAnnual,
+    otherTaxAnnual,
     donationDeclaredAnnual: cumDonation,
     donationAppliedAnnual,
     // 年度汇总所需的中期结果一并回传，避免上层重复遍历
@@ -357,10 +418,13 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       grossAnnual,
       comprehensiveAnnual,
       taxFreeAnnual,
+      nonCashAnnual,
       insurancePersonalAnnual,
       insuranceCompanyAnnual,
       taxAnnual,
       bonusTaxAnnual,
+      otherTaxAnnual,
+      otherIncomeAnnual,
       netAnnual,
       taxableIncome,
     }),
@@ -371,10 +435,15 @@ interface AnnualSnapshotInput {
   grossAnnual: number
   comprehensiveAnnual: number
   taxFreeAnnual: number
+  nonCashAnnual: number
   insurancePersonalAnnual: number
   insuranceCompanyAnnual: number
   taxAnnual: number
   bonusTaxAnnual: number
+  /** 全年额外收入已预扣税额 */
+  otherTaxAnnual: number
+  /** 全年额外收入的汇算口径收入额 */
+  otherIncomeAnnual: number
   netAnnual: number
   taxableIncome: number
 }
@@ -383,6 +452,12 @@ interface AnnualSnapshot {
   gross: number
   comprehensiveIncome: number
   taxFreeIncome: number
+  /** 全年非现金福利额，含在应发中但不计入到手 */
+  nonCashIncome: number
+  /** 全年额外收入预扣税额 */
+  otherTax: number
+  /** 全年额外收入额（汇算口径，已减除费用） */
+  otherIncome: number
   insurancePersonal: number
   insuranceCompany: number
   companyCost: number
@@ -394,12 +469,17 @@ interface AnnualSnapshot {
 }
 
 function buildAnnualSnapshot(input: AnnualSnapshotInput): AnnualSnapshot {
-  // 税负率与全年个税保持同一口径，均含年终奖单独计税部分
-  const taxTotal = round2(dec(input.taxAnnual).plus(input.bonusTaxAnnual))
+  // 税负率与全年个税保持同一口径，含年终奖单独计税部分与额外收入预扣部分
+  const taxTotal = round2(
+    dec(input.taxAnnual).plus(input.bonusTaxAnnual).plus(input.otherTaxAnnual),
+  )
   return {
     gross: input.grossAnnual,
     comprehensiveIncome: input.comprehensiveAnnual,
     taxFreeIncome: input.taxFreeAnnual,
+    nonCashIncome: input.nonCashAnnual,
+    otherTax: input.otherTaxAnnual,
+    otherIncome: input.otherIncomeAnnual,
     insurancePersonal: input.insurancePersonalAnnual,
     insuranceCompany: input.insuranceCompanyAnnual,
     companyCost: round2(dec(input.grossAnnual).plus(input.insuranceCompanyAnnual)),
@@ -418,6 +498,8 @@ function buildAnnualSnapshot(input: AnnualSnapshotInput): AnnualSnapshot {
  */
 export function computeSettlement(params: {
   comprehensiveIncome: number
+  /** 额外收入的汇算口径收入额，与工资薪金合并计税 */
+  otherIncome: number
   insurancePersonal: number
   /** 汇算口径扣除合计，不含公益捐赠 */
   deductionAll: number
@@ -425,10 +507,13 @@ export function computeSettlement(params: {
   donation: number
   monthsWorked: number
   comprehensiveWithheld: number
+  /** 额外收入已预扣税额 */
+  otherWithheld: number
 }): { settlementTax: number; settlementDiff: number; donationApplied: number } {
   const tentative = nonNegative(
     round2(
       dec(params.comprehensiveIncome)
+        .plus(params.otherIncome)
         .minus(params.insurancePersonal)
         .minus(params.deductionAll)
         .minus(dec(BASIC_DEDUCTION_MONTHLY).mul(params.monthsWorked)),
@@ -439,7 +524,11 @@ export function computeSettlement(params: {
   const settlementTax = taxByBrackets(ANNUAL_TAX_BRACKETS, taxable)
   return {
     settlementTax,
-    settlementDiff: round2(dec(settlementTax).minus(params.comprehensiveWithheld)),
+    settlementDiff: round2(
+      dec(settlementTax)
+        .minus(params.comprehensiveWithheld)
+        .minus(params.otherWithheld),
+    ),
     donationApplied,
   }
 }

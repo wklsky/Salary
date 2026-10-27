@@ -44,6 +44,8 @@ export interface MonthlyResult {
   comprehensiveIncome: number
   /** 免税收入（不并入综合所得） */
   taxFreeIncome: number
+  /** 非现金福利（饭票、购物卡等），含在应发中但不计入到手 */
+  nonCashIncome: number
   /** 当月缴费基数 */
   insuranceBase: number
   insurancePersonal: number
@@ -62,6 +64,10 @@ export interface MonthlyResult {
   tax: number
   /** 当月年终奖单独计税额 */
   bonusTax: number
+  /** 当月额外收入（劳务报酬/稿酬/特许权使用费）预扣税额 */
+  otherTax: number
+  /** 当月额外收入的汇算口径收入额（已减除费用） */
+  otherIncome: number
   /** 当月个税合计 */
   taxTotal: number
   /** 当月到手 */
@@ -72,6 +78,12 @@ export interface AnnualSummary {
   gross: number
   comprehensiveIncome: number
   taxFreeIncome: number
+  /** 全年非现金福利额，含在应发与应税中，但不计入到手 */
+  nonCashIncome: number
+  /** 全年额外收入预扣税额 */
+  otherTax: number
+  /** 全年额外收入额（汇算口径，已减除费用，稿酬已减征 30%） */
+  otherIncome: number
   insurancePersonal: number
   insuranceCompany: number
   /** 单位用工总成本 = 应发 + 单位缴纳五险一金 */

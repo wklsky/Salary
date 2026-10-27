@@ -10,6 +10,8 @@
  * - probation 试用期：已建立劳动关系，工资可能打折缴纳
  * - regular 转正后：标准发放口径
  */
+import type { InsuranceType } from './insurance'
+
 export type StageType = 'intern' | 'probation' | 'regular'
 
 export const STAGE_TYPES: StageType[] = ['intern', 'probation', 'regular']
@@ -24,4 +26,10 @@ export interface StageRange {
   toMonth: number
   /** 该阶段是否不缴纳五险一金；实习期默认开启 */
   skipInsurance: boolean
+  /**
+   * 该阶段单独停缴的险种
+   * 常见场景：试用期只缴五险、转正后才缴住房公积金
+   * skipInsurance 为 true 时此字段不生效（整体不缴）
+   */
+  skipInsuranceTypes?: InsuranceType[]
 }

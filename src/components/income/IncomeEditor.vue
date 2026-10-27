@@ -7,7 +7,13 @@
 import { computed } from 'vue'
 import { Delete, ArrowDown, ArrowUp, Plus } from '@element-plus/icons-vue'
 import { STAGE_LABELS } from '@/config/stages'
-import { amountOfStage, isItemEnabledInStage, stageTypeOfMonth } from '@/core'
+import {
+  amountOfMonth,
+  amountOfStage,
+  isItemEnabledInStage,
+  OTHER_INCOME_HINTS,
+  stageTypeOfMonth,
+} from '@/core'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import MoneyInput from '@/components/common/MoneyInput.vue'
@@ -31,6 +37,9 @@ const CYCLE_OPTIONS: { value: IncomeCycle; label: string }[] = [
 const KIND_OPTIONS: { value: IncomeKind; label: string }[] = [
   { value: 'salary', label: '工资薪金' },
   { value: 'bonus', label: '全年一次性奖金' },
+  { value: 'labor', label: '劳务报酬' },
+  { value: 'authorship', label: '稿酬' },
+  { value: 'royalty', label: '特许权使用费' },
 ]
 
 /** 读取收入项在某阶段的金额，未单独设置时回落到通用金额 */
@@ -43,11 +52,24 @@ function isStageOn(item: IncomeItem, stage: StageType): boolean {
   return isItemEnabledInStage(item, stage)
 }
 
-/** 月度固定收入合计，按转正后口径展示，用于快速核对录入是否完整 */
+/** 逐月金额模式下的某月金额，未单独设置时回落到当前解析值 */
+function monthlyAmountOf(item: IncomeItem, month: number): number {
+  return amountOfMonth(item, month, stageTypeOfMonth(store.stages, month))
+}
+
+/** 逐月金额合计，用于核对录入 */
+function monthlyAmountsSum(item: IncomeItem): number {
+  return (item.monthlyAmounts ?? []).reduce((acc, value) => acc + value, 0)
+}
+
+/**
+ * 月度收入合计，按 12 月（通常已转正）口径展示，用于快速核对录入是否完整
+ * 逐月浮动的收入项取 12 月金额，年度合计请看下方的「年度应发」
+ */
 const monthlyTotal = computed(() =>
   store.incomes
     .filter((item) => item.enabled && item.cycle === 'monthly')
-    .reduce((acc, item) => acc + stageAmountOf(item, 'regular'), 0),
+    .reduce((acc, item) => acc + amountOfMonth(item, 12, stageTypeOfMonth(store.stages, 12)), 0),
 )
 
 /** 一次性收入按其实际发放月份所处阶段取值，实习期发放的奖金可能不同 */
@@ -162,7 +184,16 @@ const annualTotal = computed(() => result.value.annual.gross)
           </el-select>
           <el-checkbox v-model="item.intoInsuranceBase" size="small">计入缴费基数</el-checkbox>
           <el-checkbox v-model="item.taxable" size="small">并入综合所得</el-checkbox>
+          <el-checkbox v-model="item.nonCash" size="small">非现金福利（不计入到手）</el-checkbox>
         </div>
+
+        <p v-if="item.nonCash" class="income-item__tip">
+          饭票、购物卡等：计入应发与应纳税所得额，但员工拿不到现金，故从到手中剔除
+        </p>
+
+        <p v-if="OTHER_INCOME_HINTS[item.kind]" class="income-item__tip">
+          {{ OTHER_INCOME_HINTS[item.kind] }}
+        </p>
 
         <div class="income-item__stage">
           <el-checkbox
@@ -171,6 +202,14 @@ const annualTotal = computed(() => result.value.annual.gross)
             @update:model-value="(value: boolean) => store.toggleStagedIncome(item.id, value)"
           >
             按阶段区分发放
+          </el-checkbox>
+          <el-checkbox
+            v-if="item.cycle === 'monthly'"
+            :model-value="item.variableByMonth"
+            size="small"
+            @update:model-value="(value: boolean) => store.toggleVariableByMonth(item.id, value)"
+          >
+            每月金额不同
           </el-checkbox>
         </div>
 
@@ -187,15 +226,32 @@ const annualTotal = computed(() => result.value.annual.gross)
               {{ STAGE_LABELS[type] }}
             </el-checkbox>
             <MoneyInput
-              v-if="isStageOn(item, type)"
+              v-if="isStageOn(item, type) && !item.variableByMonth"
               :model-value="stageAmountOf(item, type)"
               size="small"
               @update:model-value="
                 (value: number) => store.updateStageAmount(item.id, type, value)
               "
             />
-            <span v-else class="stage-cell__off">该阶段不发放</span>
+            <span v-else-if="!isStageOn(item, type)" class="stage-cell__off">该阶段不发放</span>
+            <span v-else class="stage-cell__off">按逐月金额</span>
           </div>
+        </div>
+
+        <div v-if="item.variableByMonth" class="income-item__months">
+          <div v-for="month in 12" :key="month" class="month-cell">
+            <span class="month-cell__label">{{ month }} 月</span>
+            <MoneyInput
+              :model-value="monthlyAmountOf(item, month)"
+              size="small"
+              @update:model-value="
+                (value: number) => store.updateMonthlyAmount(item.id, month, value)
+              "
+            />
+          </div>
+          <p class="income-item__tip">
+            全年合计 ¥{{ formatMoney(monthlyAmountsSum(item)) }}，逐月金额优先于阶段金额
+          </p>
         </div>
       </li>
     </ul>
@@ -204,6 +260,9 @@ const annualTotal = computed(() => result.value.annual.gross)
       <el-button :icon="Plus" size="small" @click="store.addIncome('salary')">新增收入项</el-button>
       <el-button :icon="Plus" size="small" type="warning" plain @click="store.addIncome('bonus')">
         新增年终奖
+      </el-button>
+      <el-button :icon="Plus" size="small" plain @click="store.addIncome('labor')">
+        新增劳务报酬
       </el-button>
     </footer>
   </section>
@@ -329,6 +388,29 @@ const annualTotal = computed(() => result.value.annual.gross)
   font-size: 12px;
   line-height: 24px;
   color: var(--el-text-color-placeholder);
+}
+
+.income-item__months {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.month-cell__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.income-item__tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .income-editor__actions {

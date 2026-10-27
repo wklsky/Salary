@@ -6,17 +6,23 @@
  */
 import { computed } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
+import { INSURANCE_LABELS } from '@/config/columns'
 import { MAX_MONTH, MIN_MONTH, STAGE_HINTS, STAGE_LABELS, validateStages } from '@/config/stages'
 import { amountOfStage, dec, isItemEnabledInStage, round2 } from '@/core'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import MoneyInput from '@/components/common/MoneyInput.vue'
 import { formatMoney } from '@/utils/format'
-import { STAGE_TYPES } from '@/types'
-import type { IncomeItem, StageRange, StageType } from '@/types'
+import { INSURANCE_TYPES, STAGE_TYPES } from '@/types'
+import type { IncomeItem, InsuranceType, StageRange, StageType } from '@/types'
 
 const store = useSalaryStore()
 const { result } = useSalaryCalculator()
+
+const INSURANCE_OPTIONS = INSURANCE_TYPES.map((type) => ({
+  value: type,
+  label: INSURANCE_LABELS[type],
+}))
 
 const MONTH_OPTIONS = Array.from({ length: MAX_MONTH - MIN_MONTH + 1 }, (_, index) => ({
   value: index + MIN_MONTH,
@@ -64,6 +70,8 @@ interface StagePlanRow {
   item: IncomeItem
   enabled: boolean
   amount: number
+  /** 该收入项按逐月金额取值，阶段金额不生效 */
+  variable: boolean
 }
 
 interface StagePlan {
@@ -85,11 +93,25 @@ const stagePlans = computed<StagePlan[]>(() =>
         ),
       )
 
-    const rows: StagePlanRow[] = store.incomes.map((item) => ({
-      item,
-      enabled: isItemEnabledInStage(item, type),
-      amount: amountOfStage(item, type),
-    }))
+    const rows: StagePlanRow[] = store.incomes.map((item) => {
+      const variable = item.variableByMonth === true
+      // 逐月浮动的收入项在该阶段没有统一金额，展示阶段内各月的平均值便于核对
+      const amount = variable
+        ? months.length > 0
+          ? round2(
+              dec(
+                months.reduce((acc, month) => acc + (item.monthlyAmounts?.[month - 1] ?? 0), 0),
+              ).div(months.length),
+            )
+          : 0
+        : amountOfStage(item, type)
+      return {
+        item,
+        enabled: isItemEnabledInStage(item, type),
+        amount,
+        variable,
+      }
+    })
 
     // 一次性收入不计入月度应发，单独在其发放月体现
     const monthlyTotal = round2(
@@ -119,6 +141,14 @@ const probationWarnings = computed<string[]>(() => {
     `试用期月应发 ¥${formatMoney(probation.monthlyTotal)} 仅为转正后 ¥${formatMoney(regular.monthlyTotal)} 的 ${(ratio * 100).toFixed(0)}%，低于法定 80% 下限`,
   ]
 })
+
+/** 该阶段停缴险种的可读描述，为空表示全部缴纳 */
+function skipTextOf(stage: StageRange): string {
+  if (stage.skipInsurance) return '五险一金（全部不缴）'
+  const types = stage.skipInsuranceTypes ?? []
+  if (types.length === 0) return ''
+  return types.map((type) => INSURANCE_LABELS[type]).join('、')
+}
 
 function onTypeChange(stage: StageRange, type: StageType) {
   store.updateStage(stage.id, {
@@ -194,6 +224,27 @@ function onTypeChange(stage: StageRange, type: StageType) {
               :value="option.value"
             />
           </el-select>
+          <el-select
+            :model-value="stage.skipInsuranceTypes ?? []"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            :max-collapse-tags="2"
+            :disabled="stage.skipInsurance"
+            size="small"
+            class="stage-item__skip"
+            placeholder="该阶段单独停缴的险种"
+            @update:model-value="
+              (value: InsuranceType[]) => store.updateStage(stage.id, { skipInsuranceTypes: value })
+            "
+          >
+            <el-option
+              v-for="option in INSURANCE_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
           <el-checkbox
             :model-value="stage.skipInsurance"
             size="small"
@@ -207,6 +258,9 @@ function onTypeChange(stage: StageRange, type: StageType) {
 
         <div class="stage-item__foot">
           阶段月应发 ¥{{ formatMoney(grossOfStage(stage)) }}
+          <span v-if="skipTextOf(stage)" class="stage-item__skip-text">
+            不缴：{{ skipTextOf(stage) }}
+          </span>
         </div>
       </li>
     </ul>
@@ -275,7 +329,7 @@ function onTypeChange(stage: StageRange, type: StageType) {
                 <em v-if="row.item.cycle === 'once'">（{{ row.item.month }} 月一次性）</em>
               </span>
               <MoneyInput
-                v-if="row.enabled"
+                v-if="row.enabled && !row.variable"
                 :model-value="row.amount"
                 size="small"
                 class="plan-row__amount"
@@ -283,7 +337,8 @@ function onTypeChange(stage: StageRange, type: StageType) {
                   (value: number) => store.updateStageAmount(row.item.id, plan.type, value)
                 "
               />
-              <span v-else class="plan-row__off">该阶段不发放</span>
+              <span v-else-if="!row.enabled" class="plan-row__off">该阶段不发放</span>
+              <span v-else class="plan-row__off">逐月浮动，均值 ¥{{ formatMoney(row.amount) }}</span>
             </li>
           </ul>
         </el-collapse-item>
@@ -360,9 +415,20 @@ function onTypeChange(stage: StageRange, type: StageType) {
   color: var(--el-text-color-secondary);
 }
 
+.stage-item__skip {
+  width: 220px;
+}
+
 .stage-item__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 12px;
   color: var(--el-text-color-regular);
+}
+
+.stage-item__skip-text {
+  color: var(--el-color-warning);
 }
 
 .stage-editor__actions {

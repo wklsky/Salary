@@ -20,6 +20,16 @@ export const ANNUAL_TAX_BRACKETS: TaxBracket[] = [
 ]
 
 /**
+ * 劳务报酬预扣预缴税率表
+ * 按「每次收入减除费用后的余额」适用三级超额累进，与年度综合所得税率表不同
+ */
+export const LABOR_PREPAY_BRACKETS: TaxBracket[] = [
+  { level: 1, lower: 0, upper: 20000, rate: 0.2, quickDeduction: 0 },
+  { level: 2, lower: 20000, upper: 50000, rate: 0.3, quickDeduction: 2000 },
+  { level: 3, lower: 50000, upper: Number.POSITIVE_INFINITY, rate: 0.4, quickDeduction: 7000 },
+]
+
+/**
  * 按月换算后的综合所得税率表：全年一次性奖金单独计税时使用
  * 本质是把年度级距除以 12，但速算扣除数不能简单除以 12，故独立配置
  */

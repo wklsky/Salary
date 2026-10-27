@@ -8,6 +8,7 @@ import { computed, ref } from 'vue'
 import { createDefaultIncomes } from '@/config/presets'
 import { DEDUCTION_CATALOG, DEDUCTION_LIST } from '@/config/specialDeductions'
 import { createDefaultStages, createStage } from '@/config/stages'
+import { amountOfMonth, OTHER_INCOME_LABELS, stageTypeOfMonth } from '@/core'
 import { createId } from '@/utils/id'
 import { INSURANCE_TYPES } from '@/types'
 import type {
@@ -93,19 +94,23 @@ export const useSalaryStore = defineStore(
 
     function addIncome(kind: IncomeKind = 'salary'): IncomeItem {
       const isBonus = kind === 'bonus'
+      // 劳务报酬等额外收入多为一事一结，且不计入社保缴费基数
+      const isOther = kind === 'labor' || kind === 'authorship' || kind === 'royalty'
       const item: IncomeItem = {
         id: createId('income'),
-        name: isBonus ? '年终奖' : '新增收入项',
+        name: isBonus ? '年终奖' : isOther ? (OTHER_INCOME_LABELS[kind] ?? '额外收入') : '新增收入项',
         amount: 0,
-        cycle: isBonus ? 'once' : 'monthly',
+        cycle: isBonus || isOther ? 'once' : 'monthly',
         month: 1,
-        intoInsuranceBase: !isBonus,
+        intoInsuranceBase: !isBonus && !isOther,
         taxable: true,
         kind,
         enabled: true,
         staged: false,
         stageAmounts: {},
         stageEnabled: {},
+        nonCash: false,
+        variableByMonth: false,
       }
       incomes.value.push(item)
       return item
@@ -149,6 +154,30 @@ export const useSalaryStore = defineStore(
     }
 
     /**
+     * 让收入项进入逐月金额模式
+     * 开启时把当前各月解析值（按阶段/通用口径）作为 12 个月的初始值，避免金额突变
+     */
+    function toggleVariableByMonth(id: string, value: boolean) {
+      const target = incomes.value.find((item) => item.id === id)
+      if (!target) return
+      target.variableByMonth = value
+      if (value && !target.monthlyAmounts) {
+        target.monthlyAmounts = Array.from({ length: 12 }, (_, index) =>
+          amountOfMonth(target, index + 1, stageTypeOfMonth(stages.value, index + 1)),
+        )
+      }
+    }
+
+    /** 设置收入项在指定月份的金额，仅 variableByMonth 开启后生效 */
+    function updateMonthlyAmount(id: string, month: number, amount: number) {
+      const target = incomes.value.find((item) => item.id === id)
+      if (!target) return
+      const list = target.monthlyAmounts ? [...target.monthlyAmounts] : Array<number>(12).fill(0)
+      list[month - 1] = amount
+      target.monthlyAmounts = list
+    }
+
+    /**
      * 补齐历史存档缺失的阶段字段
      * 早期版本的收入项没有 staged / stageAmounts / stageEnabled，
      * 直接读取会让内核抛错，故在读取存档与初始化时统一兜底
@@ -157,6 +186,8 @@ export const useSalaryStore = defineStore(
       return list.map((item) => ({
         ...item,
         staged: item.staged ?? false,
+        nonCash: item.nonCash ?? false,
+        variableByMonth: item.variableByMonth ?? false,
         stageAmounts: item.stageAmounts ?? {},
         stageEnabled: item.stageEnabled ?? {},
       }))
@@ -166,6 +197,11 @@ export const useSalaryStore = defineStore(
     function normalize() {
       incomes.value = normalizeIncomes(incomes.value)
       if (!Array.isArray(stages.value)) stages.value = createDefaultStages()
+      // 阶段停缴险种为后加能力，缺失时视为不停缴，保证行为不变
+      stages.value = stages.value.map((stage) => ({
+        ...stage,
+        skipInsuranceTypes: stage.skipInsuranceTypes ?? [],
+      }))
       // 公积金基数字段为后加能力，旧存档缺失时沿用社保口径，保证行为不变
       insurance.value = {
         ...insurance.value,
@@ -324,6 +360,8 @@ export const useSalaryStore = defineStore(
       updateStageAmount,
       toggleStageEnabled,
       toggleStagedIncome,
+      toggleVariableByMonth,
+      updateMonthlyAmount,
       moveIncome,
       addStage,
       removeStage,

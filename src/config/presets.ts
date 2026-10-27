@@ -57,6 +57,8 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
       'gross',
       'comprehensiveIncome',
       'taxFreeIncome',
+      'nonCashIncome',
+      'otherIncome',
       'insuranceBase',
       'ins_pension',
       'ins_medical',
@@ -78,6 +80,7 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
       'cumulativeTaxPaid',
       'tax',
       'bonusTax',
+      'otherTax',
       'taxTotal',
       'companyCost',
       'net',
@@ -106,6 +109,8 @@ export function createDefaultIncomes(): IncomeItem[] {
       staged: true,
       stageAmounts: { intern: 8000, probation: 12000, regular: 15000 },
       stageEnabled: { intern: true, probation: true, regular: true },
+      nonCash: false,
+      variableByMonth: false,
     },
     {
       id: 'performance',
@@ -121,10 +126,13 @@ export function createDefaultIncomes(): IncomeItem[] {
       staged: true,
       stageAmounts: { intern: 3000, probation: 1500, regular: 3000 },
       stageEnabled: { intern: false, probation: false, regular: true },
+      nonCash: false,
+      variableByMonth: false,
     },
     {
       id: 'allowance',
-      name: '交通/餐补',
+      // 饭票只能在食堂消费：计入应发与应税，但员工拿不到现金，故不计入到手
+      name: '餐补（饭票）',
       amount: 800,
       cycle: 'monthly',
       month: 1,
@@ -132,7 +140,11 @@ export function createDefaultIncomes(): IncomeItem[] {
       taxable: true,
       kind: 'salary',
       enabled: true,
-      // 实习期通常不含福利补贴，转正后全额发放
+      nonCash: true,
+      // 饭票按当月出勤/消费浮动，各月金额不同
+      variableByMonth: true,
+      monthlyAmounts: [680, 720, 760, 740, 800, 820, 780, 860, 740, 800, 760, 840],
+      // 实习期通常不含福利补贴；阶段停发优先于逐月金额
       staged: true,
       stageAmounts: { intern: 800, probation: 400, regular: 800 },
       stageEnabled: { intern: false, probation: true, regular: true },
@@ -150,6 +162,8 @@ export function createDefaultIncomes(): IncomeItem[] {
       staged: false,
       stageAmounts: {},
       stageEnabled: {},
+      nonCash: false,
+      variableByMonth: false,
     },
   ]
 }
