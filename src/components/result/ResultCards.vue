@@ -43,7 +43,7 @@ const segments = computed(() => {
     },
     {
       key: 'nonCash',
-      label: '非现金福利',
+      label: '非现金收入',
       value: annual.value.nonCashIncome,
       ratio: annual.value.nonCashIncome / gross,
     },
@@ -359,7 +359,8 @@ const settlementText = computed(() => {
   background: linear-gradient(180deg, #f5fbfa, #fff);
 }
 
-@media (max-width: 1080px) {
+/* 侧边栏占用约 250px，1200px 以下先让概览卡纵向排列，避免两栏被压缩 */
+@media (max-width: 1200px) {
   .result-summary {
     grid-template-columns: minmax(0, 1fr);
   }

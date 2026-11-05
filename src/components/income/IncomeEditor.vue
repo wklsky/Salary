@@ -225,11 +225,13 @@ const annualTotal = computed(() => result.value.annual.gross)
           </el-checkbox>
           <el-checkbox v-model="item.intoInsuranceBase" size="small">计入缴费基数</el-checkbox>
           <el-checkbox v-model="item.taxable" size="small">并入综合所得</el-checkbox>
-          <el-checkbox v-model="item.nonCash" size="small">非现金福利（不计入到手）</el-checkbox>
+          <el-checkbox v-model="item.nonCash" size="small">
+            计入税前收入，不实际发放（餐补/饭票）
+          </el-checkbox>
         </div>
 
         <p v-if="item.nonCash" class="income-item__tip">
-          饭票、购物卡等：计入应发与应纳税所得额，但员工拿不到现金，故从到手中剔除
+          餐补、饭票、购物卡等：计入应发合计与应纳税所得额（参与计税），但不作为实际发放工资，不计入到手与实发工资
         </p>
 
         <p v-if="OTHER_INCOME_HINTS[item.kind]" class="income-item__tip">

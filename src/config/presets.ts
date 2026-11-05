@@ -22,6 +22,7 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
       'month',
       'stage',
       'gross',
+      'cashGross',
       'insuranceBase',
       'insurancePersonal',
       'ins_housingFund',

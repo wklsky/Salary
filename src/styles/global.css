@@ -24,9 +24,9 @@
   --app-rose-600: #b42318;
   --app-rose-100: #fdecea;
 
-  --app-radius-sm: 8px;
-  --app-radius-md: 12px;
-  --app-radius-lg: 18px;
+  --app-radius-sm: 6px;
+  --app-radius-md: 10px;
+  --app-radius-lg: 14px;
   --app-shadow-sm: 0 1px 2px rgb(22 35 58 / 5%);
   --app-shadow-md: 0 14px 40px -24px rgb(22 35 58 / 35%);
 
@@ -45,8 +45,8 @@
   --el-color-primary-light-8: #d0e5e2;
   --el-color-primary-light-9: #e7f2f0;
   --el-color-primary-dark-2: #0b5e57;
-  --el-border-radius-base: 8px;
-  --el-border-radius-small: 6px;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
   --el-font-family: var(--app-font-sans);
 }
 

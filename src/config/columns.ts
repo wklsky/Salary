@@ -105,13 +105,13 @@ export function createStaticColumns(): ColumnSchema[] {
       dynamic: false,
     },
     {
-      // 现金应发：剔除饭票等非现金福利，口径与实发工资的扣减基数一致
+      // 实际应发工资：剔除饭票等非现金收入，口径与实发工资的扣减基数一致
       key: 'cashGross',
-      label: '应发工资',
+      label: '实际应发工资',
       group: 'income',
-      visible: false,
-      order: 99,
-      width: 120,
+      visible: true,
+      order: 101,
+      width: 130,
       formatter: 'money',
       dynamic: false,
     },
@@ -148,7 +148,7 @@ export function createStaticColumns(): ColumnSchema[] {
     },
     {
       key: 'nonCashIncome',
-      label: '非现金福利',
+      label: '非现金收入',
       group: 'income',
       visible: false,
       order: 103,

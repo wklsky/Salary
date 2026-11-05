@@ -243,8 +243,9 @@ function cellTitle(column: ColumnSchema): string {
     case 'note':
       return '可直接编辑本月备注'
     case 'gross':
+      return '可编辑应发合计（含餐补等非现金收入），系统自动反推调整项'
     case 'cashGross':
-      return '可编辑应发金额，系统自动反推调整项'
+      return '可编辑实际应发工资（不含非现金收入），系统自动反推调整项'
     case 'net':
       return '可编辑实发工资，系统自动反推应发工资'
     case 'tax':

@@ -140,9 +140,9 @@ const deductionRows = computed(() => {
     ...(annual.nonCashIncome > 0
       ? [
           {
-            name: '非现金福利（不计入到手）',
+            name: '非现金收入（不实际发放）',
             amount: annual.nonCashIncome,
-            note: '饭票、购物卡等，含在应发中并已计税，但员工拿不到现金',
+            note: '餐补、饭票等，计入应发与应纳税所得额并参与计税，但不作为实际发放工资',
           },
         ]
       : []),

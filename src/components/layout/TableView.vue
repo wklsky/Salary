@@ -4,7 +4,7 @@
  * @FilePath: src/components/layout/TableView.vue
  * @Description: 月度明细视图：结果概览、可自定义表头的明细表与单月数据编辑
  */
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { ArrowLeft, Download, Setting } from '@element-plus/icons-vue'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import BonusAdvice from '@/components/result/BonusAdvice.vue'
@@ -13,18 +13,23 @@ import ResultCards from '@/components/result/ResultCards.vue'
 import MonthEditorDrawer from '@/components/month/MonthEditorDrawer.vue'
 import { useExport } from '@/composables/useExport'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
+import { useSectionSpy } from '@/composables/useSectionSpy'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
-import type { MonthlyResult } from '@/types'
+import type { MonthlyResult, NavItem, TableSectionKey } from '@/types'
 
 /**
  * 对外事件
  * @event back 返回录入设置视图
  * @event config-columns 打开表格列配置
+ * @event sections 分区目录变化，同步给侧边栏
+ * @event active-section 滚动时回传当前所在分区
  */
 const emit = defineEmits<{
   back: []
   'config-columns': []
+  sections: [items: NavItem[]]
+  'active-section': [key: TableSectionKey]
 }>()
 
 // 图表依赖 ECharts 且非首屏必需，走异步组件避免拖慢首屏渲染
@@ -59,10 +64,47 @@ function onExportCsv() {
     filename: `薪资明细_${settingsStore.year}.csv`,
   })
 }
+
+const hasBonusAdvice = computed(() => Boolean(result.value.bonusComparison))
+
+/** 月度明细分区目录，编号与元信息随列配置和奖金项实时变化 */
+const sections = computed<NavItem[]>(() => {
+  const items: NavItem[] = [
+    { key: 'overview', label: '结果概览', meta: '到手 / 税负' },
+    ...(hasBonusAdvice.value
+      ? [{ key: 'bonus', label: '年终奖建议', meta: '计税口径对比' }]
+      : []),
+    { key: 'monthly', label: '逐月明细', meta: `${schemaStore.visibleColumns.length} 列` },
+    { key: 'annual', label: '年度汇总与图表', meta: '汇总 / 图表' },
+  ]
+  return items.map((item, index) => ({
+    ...item,
+    index: String(index + 1).padStart(2, '0'),
+  }))
+})
+
+watch(sections, (items) => emit('sections', items), { immediate: true, deep: true })
+
+const spy = useSectionSpy({
+  getIds: () => sections.value.map((item) => `table-section-${item.key}`),
+  getKeys: () => sections.value.map((item) => item.key),
+  onChange: (key) => emit('active-section', key as TableSectionKey),
+})
+
+function jumpTo(key: TableSectionKey) {
+  const behavior =
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  nextTick(() => {
+    document.getElementById(`table-section-${key}`)?.scrollIntoView({ block: 'start', behavior })
+    spy.update()
+  })
+}
+
+defineExpose({ jumpTo })
 </script>
 
 <template>
-  <section class="table-view">
+  <section id="table-section-overview" class="table-view">
     <header class="table-view__head">
       <el-button :icon="ArrowLeft" size="small" text @click="emit('back')">返回录入</el-button>
       <div class="table-view__titles">
@@ -79,37 +121,46 @@ function onExportCsv() {
       </div>
     </header>
 
-    <ResultCards />
-    <BonusAdvice />
+    <section class="table-view__section">
+      <ResultCards />
+    </section>
 
-    <el-card shadow="never" class="table-view__card">
-      <template #header>
-        <div class="table-view__card-head">
-          <span class="table-view__card-title">逐月发放与扣缴</span>
-          <span class="table-view__card-hint">
-            点击月份单元格打开单月编辑；表格中的金额、分数、备注可直接编辑并自动联动
-          </span>
-        </div>
-      </template>
-      <MonthlyTable @row-click="onRowClick" @config-columns="emit('config-columns')" />
-    </el-card>
+    <section v-if="hasBonusAdvice" id="table-section-bonus" class="table-view__section">
+      <BonusAdvice />
+    </section>
 
-    <el-card shadow="never">
-      <el-tabs v-model="resultTab">
-        <el-tab-pane label="年度汇总" name="annual" lazy>
-          <AnnualTable />
-        </el-tab-pane>
-        <!-- 图表依赖 ECharts，设为懒加载，切换到该页签时才发起组件请求 -->
-        <el-tab-pane label="图表" name="chart" lazy>
-          <Suspense>
-            <ChartPanel />
-            <template #fallback>
-              <div class="chart-loading">图表加载中…</div>
-            </template>
-          </Suspense>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+    <section id="table-section-monthly" class="table-view__section">
+      <el-card shadow="never" class="table-view__card">
+        <template #header>
+          <div class="table-view__card-head">
+            <span class="table-view__card-title">逐月发放与扣缴</span>
+            <span class="table-view__card-hint">
+              点击月份单元格打开单月编辑；表格中的金额、分数、备注可直接编辑并自动联动
+            </span>
+          </div>
+        </template>
+        <MonthlyTable @row-click="onRowClick" @config-columns="emit('config-columns')" />
+      </el-card>
+    </section>
+
+    <section id="table-section-annual" class="table-view__section">
+      <el-card shadow="never">
+        <el-tabs v-model="resultTab">
+          <el-tab-pane label="年度汇总" name="annual" lazy>
+            <AnnualTable />
+          </el-tab-pane>
+          <!-- 图表依赖 ECharts，设为懒加载，切换到该页签时才发起组件请求 -->
+          <el-tab-pane label="图表" name="chart" lazy>
+            <Suspense>
+              <ChartPanel />
+              <template #fallback>
+                <div class="chart-loading">图表加载中…</div>
+              </template>
+            </Suspense>
+          </el-tab-pane>
+        </el-tabs>
+      </el-card>
+    </section>
 
     <MonthEditorDrawer v-model="editorVisible" :month="editingMonth" />
   </section>
@@ -125,6 +176,10 @@ function onExportCsv() {
   margin: 0 auto;
 }
 
+.table-view__section {
+  scroll-margin-top: 12px;
+}
+
 .table-view__head {
   display: flex;
   align-items: center;
@@ -133,7 +188,7 @@ function onExportCsv() {
   padding: 10px 14px;
   background: var(--app-surface);
   border: 1px solid var(--app-line);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: var(--app-shadow-sm);
 }
 

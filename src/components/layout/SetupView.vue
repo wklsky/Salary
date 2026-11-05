@@ -4,7 +4,7 @@
  * @FilePath: src/components/layout/SetupView.vue
  * @Description: 录入设置视图：左侧按「周期 → 收入 → 社保 → 阶段 → 扣除」分区录入，右侧常驻实时结果
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import { POLICY_DISCLAIMER } from '@/config/policy'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
@@ -13,18 +13,23 @@ import IncomeEditor from '@/components/income/IncomeEditor.vue'
 import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
 import StageEditor from '@/components/stage/StageEditor.vue'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
+import { useSectionSpy } from '@/composables/useSectionSpy'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { resolveCity, round2 } from '@/core'
 import { formatMoney, formatPercent } from '@/utils/format'
-import type { BonusMode } from '@/types'
+import type { BonusMode, NavItem, SetupSectionKey } from '@/types'
 
 /**
  * 对外事件
  * @event next 切换到月度明细视图
+ * @event sections 分区目录变化，同步给侧边栏
+ * @event active-section 滚动时回传当前所在分区
  */
 const emit = defineEmits<{
   next: []
+  sections: [items: NavItem[]]
+  'active-section': [key: SetupSectionKey]
 }>()
 
 const salaryStore = useSalaryStore()
@@ -42,39 +47,38 @@ const BONUS_MODE_OPTIONS: { value: BonusMode; label: string }[] = [
   { value: 'merged', label: '并入综合所得' },
 ]
 
-type SectionKey =
-  | 'period'
-  | 'income'
-  | 'insurance'
-  | 'stage'
-  | 'deduction'
-  | 'posttax'
-  | 'advanced'
-
-/** 表单较重且非必填的分区默认收起，点击分区导航时自动展开 */
-const COLLAPSIBLE_SECTIONS = new Set<SectionKey>([
+/** 表单较重且非必填的分区默认收起，点击侧边栏目录时自动展开 */
+const COLLAPSIBLE_SECTIONS = new Set<SetupSectionKey>([
   'stage',
   'deduction',
   'posttax',
   'advanced',
 ])
-const openSections = ref<SectionKey[]>([])
+const openSections = ref<SetupSectionKey[]>([])
 
-function isOpen(key: SectionKey): boolean {
+function isOpen(key: SetupSectionKey): boolean {
   return !COLLAPSIBLE_SECTIONS.has(key) || openSections.value.includes(key)
 }
 
-function toggleSection(key: SectionKey) {
+function scrollToSection(key: SetupSectionKey) {
+  const behavior =
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  document.getElementById(`section-${key}`)?.scrollIntoView({ block: 'start', behavior })
+}
+
+function toggleSection(key: SetupSectionKey) {
   if (!COLLAPSIBLE_SECTIONS.has(key)) return
   openSections.value = isOpen(key)
     ? openSections.value.filter((item) => item !== key)
     : [...openSections.value, key]
+  nextTick(() => spy.update())
 }
 
-function jumpTo(key: SectionKey) {
+function jumpTo(key: SetupSectionKey) {
   if (!isOpen(key)) openSections.value = [...openSections.value, key]
   nextTick(() => {
-    document.getElementById(`section-${key}`)?.scrollIntoView({ block: 'start' })
+    scrollToSection(key)
+    spy.update()
   })
 }
 
@@ -101,7 +105,7 @@ const taxpayerLabel = computed(() =>
 )
 
 /** 分区导航：编号对应录入顺序，元信息显示该分区的真实配置状态 */
-const navItems = computed<{ key: SectionKey; index: string; label: string; meta: string }[]>(() => [
+const navItems = computed<NavItem[]>(() => [
   { key: 'period', index: '01', label: '计算周期', meta: `${settingsStore.monthCount} 个月` },
   { key: 'income', index: '02', label: '收入项', meta: `${salaryStore.activeIncomes.length} 项` },
   { key: 'insurance', index: '03', label: '五险一金', meta: cityName.value },
@@ -111,12 +115,23 @@ const navItems = computed<{ key: SectionKey; index: string; label: string; meta:
   { key: 'advanced', index: '07', label: '高级设置', meta: taxpayerLabel.value },
 ])
 
+/** 分区目录同步给应用侧边栏，编号与元信息随录入状态实时更新 */
+watch(navItems, (items) => emit('sections', items), { immediate: true, deep: true })
+
+const spy = useSectionSpy({
+  getIds: () => navItems.value.map((item) => `section-${item.key}`),
+  getKeys: () => navItems.value.map((item) => item.key),
+  onChange: (key) => emit('active-section', key as SetupSectionKey),
+})
+
+defineExpose({ jumpTo })
+
 const annual = computed(() => result.value.annual)
 const monthsWorked = computed(
   () => Math.max(1, settingsStore.endMonth - settingsStore.startMonth + 1),
 )
 
-/** 结果构成：到手 / 五险一金 / 个税 / 非现金福利，四者合计等于应发 */
+/** 结果构成：到手 / 五险一金 / 个税 / 税后扣款 / 非现金收入，合计等于应发 */
 const segments = computed(() => {
   const gross = annual.value.gross || 1
   return [
@@ -136,7 +151,7 @@ const segments = computed(() => {
     },
     {
       key: 'nonCash',
-      label: '非现金福利',
+      label: '非现金收入',
       value: annual.value.nonCashIncome,
       ratio: annual.value.nonCashIncome / gross,
     },
@@ -148,22 +163,6 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 <template>
   <section class="setup">
-    <nav class="setup__nav" aria-label="录入分区">
-      <button
-        v-for="item in navItems"
-        :key="item.key"
-        type="button"
-        class="setup__nav-item"
-        @click="jumpTo(item.key)"
-      >
-        <span class="setup__nav-index">{{ item.index }}</span>
-        <span class="setup__nav-text">
-          <span class="setup__nav-label">{{ item.label }}</span>
-          <span class="setup__nav-meta">{{ item.meta }}</span>
-        </span>
-      </button>
-    </nav>
-
     <div class="setup__grid">
       <div class="setup__main">
         <section id="section-period" class="panel">
@@ -427,7 +426,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
               <dd class="num">¥{{ formatMoney(annual.postTaxDeduction) }}</dd>
             </div>
             <div v-if="annual.nonCashIncome > 0">
-              <dt>非现金福利</dt>
+              <dt>非现金收入</dt>
               <dd class="num">¥{{ formatMoney(annual.nonCashIncome) }}</dd>
             </div>
             <div class="payslip__ledger-total">
@@ -457,67 +456,6 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   margin: 0 auto;
 }
 
-.setup__nav {
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  overflow-x: auto;
-  border: 1px solid var(--app-line);
-  border-radius: 14px;
-  background: rgb(255 255 255 / 72%);
-  scrollbar-width: none;
-}
-
-.setup__nav::-webkit-scrollbar {
-  display: none;
-}
-
-.setup__nav-item {
-  display: flex;
-  flex: 1 1 0;
-  gap: 9px;
-  align-items: center;
-  min-width: 132px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.2s;
-}
-
-.setup__nav-item:hover {
-  background: #f3f6fa;
-}
-
-.setup__nav-index {
-  padding: 2px 5px;
-  border-radius: 6px;
-  color: #fff;
-  background: var(--app-ink-900);
-  font-family: var(--app-font-num);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.setup__nav-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.setup__nav-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--app-ink-900);
-}
-
-.setup__nav-meta {
-  font-size: 10.5px;
-  color: var(--app-ink-500);
-}
-
 .setup__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -540,7 +478,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 .panel {
   overflow: hidden;
   border: 1px solid var(--app-line);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--app-surface);
   box-shadow: var(--app-shadow-sm);
   scroll-margin-top: 12px;
@@ -854,7 +792,8 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   text-align: center;
 }
 
-@media (max-width: 1080px) {
+/* 侧边栏占用约 250px，较窄的桌面也需要把结果卡移到主表单下方 */
+@media (max-width: 1200px) {
   .setup__grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -866,10 +805,6 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 @media (max-width: 640px) {
-  .setup__nav-item {
-    min-width: 118px;
-  }
-
   .setup__period {
     grid-template-columns: 1fr;
   }
