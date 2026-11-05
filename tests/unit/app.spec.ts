@@ -35,16 +35,22 @@ describe('应用挂载冒烟', () => {
     expect(text).not.toContain('Infinity')
   })
 
-  it('月度明细视图渲染结果卡片与年度汇总', () => {
+  it('月度明细按分页渲染结果概览、逐月明细与年度汇总', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
-    const wrapper = mount(TableView, { global: { plugins: [pinia, ElementPlus] } })
+    const wrapper = mount(TableView, {
+      props: { section: 'overview' },
+      global: { plugins: [pinia, ElementPlus] },
+    })
 
-    const text = wrapper.text()
-    expect(text).toContain('单位用工成本')
-    expect(text).toContain('年度汇总')
-    expect(text).toContain('可直接编辑')
-    expect(text).not.toContain('NaN')
+    expect(wrapper.text()).toContain('单位用工成本')
+    expect(wrapper.text()).not.toContain('NaN')
+
+    await wrapper.setProps({ section: 'monthly' })
+    expect(wrapper.text()).toContain('可直接编辑')
+
+    await wrapper.setProps({ section: 'annual' })
+    expect(wrapper.text()).toContain('年度汇总')
   })
 
   it('默认预设生成可见列且收入项自动派生动态列', () => {

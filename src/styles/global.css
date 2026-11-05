@@ -36,6 +36,9 @@
     sans-serif;
   --app-font-num:
     'Bahnschrift', 'DIN Alternate', 'SF Mono', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  /* 账本式章节序号：用宋体/衬线体做少量点缀，正文仍保持无衬线 */
+  --app-font-ledger:
+    'Songti SC', 'STSong', 'SimSun', Georgia, 'Times New Roman', serif;
 
   /* Element Plus 主色改用玉石绿，和默认蓝色区分开 */
   --el-color-primary: #0f766e;

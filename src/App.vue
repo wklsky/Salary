@@ -39,8 +39,6 @@ const navDrawerVisible = ref(false)
 const activeSchemeId = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const bodyRef = ref<HTMLElement | null>(null)
-const setupRef = ref<{ jumpTo: (key: SetupSectionKey) => void } | null>(null)
-const tableRef = ref<{ jumpTo: (key: TableSectionKey) => void } | null>(null)
 
 /** 两个视图各自上报的分区目录，侧边栏只展示当前视图的那一份 */
 const setupSections = ref<NavItem[]>([])
@@ -67,8 +65,11 @@ const viewTabs: { value: AppView; label: string }[] = [
 ]
 
 function onSelectView(next: AppView) {
-  view.value = next
   navDrawerVisible.value = false
+  if (view.value === next) return
+  view.value = next
+  // 同步切到新视图首分页，避免视图切换瞬间出现空白页
+  activeSection.value = next === 'setup' ? 'period' : 'overview'
 }
 
 /** 桌面端折叠/展开侧边栏，窄屏改为打开抽屉菜单 */
@@ -80,41 +81,41 @@ function onToggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
+/** 分区列表变化时，保证当前激活页仍然存在（如删除年终奖后回退到结果概览） */
+function ensureActive(items: NavItem[]) {
+  if (items.length === 0) return
+  if (!items.some((item) => item.key === activeSection.value)) {
+    activeSection.value = items[0]?.key ?? ''
+  }
+}
+
 function onSetupSections(items: NavItem[]) {
   setupSections.value = items
+  if (view.value === 'setup') ensureActive(items)
 }
 
 function onTableSections(items: NavItem[]) {
   tableSections.value = items
+  if (view.value === 'table') ensureActive(items)
 }
 
-function onSetupActive(key: SetupSectionKey) {
-  if (view.value === 'setup') activeSection.value = key
-}
-
-function onTableActive(key: TableSectionKey) {
-  if (view.value === 'table') activeSection.value = key
-}
-
-/** 侧边栏点击：展开对应分区并滚动到目标位置 */
+/** 侧边栏点击：切换到对应分页 */
 function onNavSelect(key: string) {
   navDrawerVisible.value = false
   if (!key) return
   activeSection.value = key
-  if (view.value === 'setup') {
-    setupRef.value?.jumpTo(key as SetupSectionKey)
-  } else {
-    tableRef.value?.jumpTo(key as TableSectionKey)
-  }
 }
 
-/** 切换视图时回到顶部，并让侧边栏高亮新视图的首个分区 */
+/** 切换视图时关闭移动抽屉并把内容区回到顶部 */
 watch(view, async () => {
   navDrawerVisible.value = false
-  activeSection.value = ''
   await nextTick()
   bodyRef.value?.scrollTo({ top: 0 })
-  activeSection.value = currentSections.value[0]?.key ?? ''
+})
+
+/** 分页切换后内容区回到顶部，不同界面之间不会沿用上一页的滚动位置 */
+watch(activeSection, () => {
+  nextTick(() => bodyRef.value?.scrollTo({ top: 0 }))
 })
 
 /**
@@ -293,6 +294,7 @@ async function onReset() {
     schemaStore.syncPostTaxColumns(salaryStore.postTaxDeductions)
     schemaStore.syncScoreColumns(salaryStore.incomes)
     view.value = 'setup'
+    activeSection.value = 'period'
     ElMessage.success('已重置')
   } catch (error) {
     // 用户取消重置
@@ -434,21 +436,21 @@ function onCommand(command: string) {
         </span>
       </div>
 
-      <main ref="bodyRef" class="app__body" data-scroll-root>
+      <main ref="bodyRef" class="app__body">
         <SetupView
           v-if="view === 'setup'"
-          ref="setupRef"
+          :section="activeSection as SetupSectionKey"
           @next="onSelectView('table')"
           @sections="onSetupSections"
-          @active-section="onSetupActive"
+          @select-section="onNavSelect"
         />
         <TableView
           v-else
-          ref="tableRef"
+          :section="activeSection as TableSectionKey"
           @back="onSelectView('setup')"
           @config-columns="drawerVisible = true"
           @sections="onTableSections"
-          @active-section="onTableActive"
+          @select-section="onNavSelect"
         />
       </main>
 

@@ -56,8 +56,12 @@ describe('组件挂载冒烟', () => {
     expect(text).toContain('转正后')
   })
 
-  it('SetupView 可挂载并展示计算周期', () => {
-    const text = mountWith(SetupView).text()
+  it('SetupView 可挂载并展示计算周期分页', () => {
+    const wrapper = mount(SetupView, {
+      props: { section: 'period' },
+      global: { plugins: [ElementPlus, createPinia()] },
+    })
+    const text = wrapper.text()
     expect(text).toContain('计算周期')
     expect(text).toContain('计算月数')
     expect(text).toContain('个月，最长 12 个月')

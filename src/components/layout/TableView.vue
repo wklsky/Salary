@@ -4,7 +4,7 @@
  * @FilePath: src/components/layout/TableView.vue
  * @Description: 月度明细视图：结果概览、可自定义表头的明细表与单月数据编辑
  */
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { ArrowLeft, Download, Setting } from '@element-plus/icons-vue'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import BonusAdvice from '@/components/result/BonusAdvice.vue'
@@ -13,23 +13,29 @@ import ResultCards from '@/components/result/ResultCards.vue'
 import MonthEditorDrawer from '@/components/month/MonthEditorDrawer.vue'
 import { useExport } from '@/composables/useExport'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
-import { useSectionSpy } from '@/composables/useSectionSpy'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import type { MonthlyResult, NavItem, TableSectionKey } from '@/types'
+
+interface Props {
+  /** 当前展示的月度明细分页 */
+  section: TableSectionKey
+}
+
+const props = defineProps<Props>()
 
 /**
  * 对外事件
  * @event back 返回录入设置视图
  * @event config-columns 打开表格列配置
  * @event sections 分区目录变化，同步给侧边栏
- * @event active-section 滚动时回传当前所在分区
+ * @event select-section 切换到上一个/下一个明细分页
  */
 const emit = defineEmits<{
   back: []
   'config-columns': []
   sections: [items: NavItem[]]
-  'active-section': [key: TableSectionKey]
+  'select-section': [key: TableSectionKey]
 }>()
 
 // 图表依赖 ECharts 且非首屏必需，走异步组件避免拖慢首屏渲染
@@ -40,7 +46,7 @@ const schemaStore = useTableSchemaStore()
 const { result } = useSalaryCalculator()
 const { exportMonthlyCsv } = useExport()
 
-const resultTab = ref('monthly')
+const resultTab = ref('annual')
 const editorVisible = ref(false)
 const editingMonth = ref(1)
 
@@ -85,35 +91,45 @@ const sections = computed<NavItem[]>(() => {
 
 watch(sections, (items) => emit('sections', items), { immediate: true, deep: true })
 
-const spy = useSectionSpy({
-  getIds: () => sections.value.map((item) => `table-section-${item.key}`),
-  getKeys: () => sections.value.map((item) => item.key),
-  onChange: (key) => emit('active-section', key as TableSectionKey),
+const currentIndex = computed(() =>
+  sections.value.findIndex((item) => item.key === props.section),
+)
+const prevSection = computed(() =>
+  currentIndex.value > 0 ? sections.value[currentIndex.value - 1] : undefined,
+)
+const nextSection = computed(() => {
+  const index = currentIndex.value
+  return index >= 0 && index < sections.value.length - 1
+    ? sections.value[index + 1]
+    : undefined
 })
 
-function jumpTo(key: TableSectionKey) {
-  const behavior =
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-  nextTick(() => {
-    document.getElementById(`table-section-${key}`)?.scrollIntoView({ block: 'start', behavior })
-    spy.update()
-  })
-}
+const currentSection = computed(() => sections.value[currentIndex.value])
+const currentSectionLabel = computed(() => currentSection.value?.label ?? '结果概览')
+const pageProgress = computed(() => {
+  const total = sections.value.length
+  const current = Math.max(currentIndex.value + 1, 1)
+  return `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+})
 
-defineExpose({ jumpTo })
+function goToSection(item: NavItem | undefined) {
+  if (!item) return
+  emit('select-section', item.key as TableSectionKey)
+}
 </script>
 
 <template>
-  <section id="table-section-overview" class="table-view">
+  <section class="table-view">
     <header class="table-view__head">
       <el-button :icon="ArrowLeft" size="small" text @click="emit('back')">返回录入</el-button>
       <div class="table-view__titles">
-        <h2 class="table-view__title">月度明细</h2>
+        <span class="table-view__eyebrow">月度明细 · {{ pageProgress }}</span>
+        <h2 class="table-view__title">{{ currentSectionLabel }}</h2>
         <p class="table-view__range">
           {{ settingsStore.year }} 年 · {{ settingsStore.rangeText }}
         </p>
       </div>
-      <div class="table-view__actions">
+      <div v-if="section === 'monthly'" class="table-view__actions">
         <el-button size="small" :icon="Setting" @click="emit('config-columns')">表格列</el-button>
         <el-button size="small" type="primary" plain :icon="Download" @click="onExportCsv">
           导出明细
@@ -121,15 +137,16 @@ defineExpose({ jumpTo })
       </div>
     </header>
 
-    <section class="table-view__section">
+    <section v-if="section === 'overview'" class="table-view__section">
       <ResultCards />
     </section>
 
-    <section v-if="hasBonusAdvice" id="table-section-bonus" class="table-view__section">
-      <BonusAdvice />
+    <section v-if="section === 'bonus'" id="table-section-bonus" class="table-view__section">
+      <BonusAdvice v-if="hasBonusAdvice" />
+      <el-empty v-else description="当前没有年终奖收入项，添加后可查看计税口径建议" />
     </section>
 
-    <section id="table-section-monthly" class="table-view__section">
+    <section v-if="section === 'monthly'" class="table-view__section">
       <el-card shadow="never" class="table-view__card">
         <template #header>
           <div class="table-view__card-head">
@@ -143,7 +160,7 @@ defineExpose({ jumpTo })
       </el-card>
     </section>
 
-    <section id="table-section-annual" class="table-view__section">
+    <section v-if="section === 'annual'" class="table-view__section">
       <el-card shadow="never">
         <el-tabs v-model="resultTab">
           <el-tab-pane label="年度汇总" name="annual" lazy>
@@ -162,6 +179,20 @@ defineExpose({ jumpTo })
       </el-card>
     </section>
 
+    <div class="table-view__pager">
+      <span class="table-view__pager-progress">{{ pageProgress }}</span>
+      <el-button v-if="prevSection" size="small" @click="goToSection(prevSection)">
+        ← {{ prevSection.label }}
+      </el-button>
+      <span class="table-view__pager-spacer" />
+      <el-button v-if="nextSection" size="small" @click="goToSection(nextSection)">
+        {{ nextSection.label }} →
+      </el-button>
+      <el-button v-else size="small" type="primary" @click="emit('back')">
+        返回录入设置
+      </el-button>
+    </div>
+
     <MonthEditorDrawer v-model="editorVisible" :month="editingMonth" />
   </section>
 </template>
@@ -172,12 +203,50 @@ defineExpose({ jumpTo })
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
 .table-view__section {
-  scroll-margin-top: 12px;
+  animation: table-page-in 0.18s ease;
+}
+
+/* 与录入设置一致的账本式分页页脚 */
+.table-view__pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px 6px;
+  border-top: 1px dashed var(--app-line-strong);
+}
+
+.table-view__pager-progress {
+  color: var(--app-ink-500);
+  font-family: var(--app-font-ledger);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+}
+
+.table-view__pager-spacer {
+  flex: 1;
+}
+
+@keyframes table-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-view__section {
+    animation: none;
+  }
 }
 
 .table-view__head {
@@ -185,7 +254,7 @@ defineExpose({ jumpTo })
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: var(--app-surface);
   border: 1px solid var(--app-line);
   border-radius: 8px;
@@ -196,11 +265,19 @@ defineExpose({ jumpTo })
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
 
+.table-view__eyebrow {
+  color: var(--app-jade-700);
+  font-family: var(--app-font-ledger);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
 .table-view__title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--app-ink-900);
 }

@@ -129,8 +129,10 @@ function sectionTitle(item: NavItem): string {
   border-radius: 9px;
   background: linear-gradient(135deg, #0f766e, #0b5e57);
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
+  font-family: var(--app-font-ledger);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
   box-shadow: 0 8px 16px -10px rgb(15 118 110 / 90%);
 }
 

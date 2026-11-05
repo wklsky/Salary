@@ -4,8 +4,8 @@
  * @FilePath: src/components/layout/SetupView.vue
  * @Description: 录入设置视图：左侧按「周期 → 收入 → 社保 → 阶段 → 扣除」分区录入，右侧常驻实时结果
  */
-import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { computed, watch } from 'vue'
+import { ArrowRight } from '@element-plus/icons-vue'
 import { POLICY_DISCLAIMER } from '@/config/policy'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
 import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEditor.vue'
@@ -13,23 +13,29 @@ import IncomeEditor from '@/components/income/IncomeEditor.vue'
 import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
 import StageEditor from '@/components/stage/StageEditor.vue'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
-import { useSectionSpy } from '@/composables/useSectionSpy'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { resolveCity, round2 } from '@/core'
 import { formatMoney, formatPercent } from '@/utils/format'
 import type { BonusMode, NavItem, SetupSectionKey } from '@/types'
 
+interface Props {
+  /** 当前展示的录入分页 */
+  section: SetupSectionKey
+}
+
+const props = defineProps<Props>()
+
 /**
  * 对外事件
  * @event next 切换到月度明细视图
  * @event sections 分区目录变化，同步给侧边栏
- * @event active-section 滚动时回传当前所在分区
+ * @event select-section 切换到上一个/下一个录入分页
  */
 const emit = defineEmits<{
   next: []
   sections: [items: NavItem[]]
-  'active-section': [key: SetupSectionKey]
+  'select-section': [key: SetupSectionKey]
 }>()
 
 const salaryStore = useSalaryStore()
@@ -46,41 +52,6 @@ const BONUS_MODE_OPTIONS: { value: BonusMode; label: string }[] = [
   { value: 'separate', label: '单独计税' },
   { value: 'merged', label: '并入综合所得' },
 ]
-
-/** 表单较重且非必填的分区默认收起，点击侧边栏目录时自动展开 */
-const COLLAPSIBLE_SECTIONS = new Set<SetupSectionKey>([
-  'stage',
-  'deduction',
-  'posttax',
-  'advanced',
-])
-const openSections = ref<SetupSectionKey[]>([])
-
-function isOpen(key: SetupSectionKey): boolean {
-  return !COLLAPSIBLE_SECTIONS.has(key) || openSections.value.includes(key)
-}
-
-function scrollToSection(key: SetupSectionKey) {
-  const behavior =
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-  document.getElementById(`section-${key}`)?.scrollIntoView({ block: 'start', behavior })
-}
-
-function toggleSection(key: SetupSectionKey) {
-  if (!COLLAPSIBLE_SECTIONS.has(key)) return
-  openSections.value = isOpen(key)
-    ? openSections.value.filter((item) => item !== key)
-    : [...openSections.value, key]
-  nextTick(() => spy.update())
-}
-
-function jumpTo(key: SetupSectionKey) {
-  if (!isOpen(key)) openSections.value = [...openSections.value, key]
-  nextTick(() => {
-    scrollToSection(key)
-    spy.update()
-  })
-}
 
 const currentBonusMode = computed({
   get: () => settingsStore.bonusMode,
@@ -118,13 +89,29 @@ const navItems = computed<NavItem[]>(() => [
 /** 分区目录同步给应用侧边栏，编号与元信息随录入状态实时更新 */
 watch(navItems, (items) => emit('sections', items), { immediate: true, deep: true })
 
-const spy = useSectionSpy({
-  getIds: () => navItems.value.map((item) => `section-${item.key}`),
-  getKeys: () => navItems.value.map((item) => item.key),
-  onChange: (key) => emit('active-section', key as SetupSectionKey),
+const currentIndex = computed(() =>
+  navItems.value.findIndex((item) => item.key === props.section),
+)
+const prevSection = computed(() =>
+  currentIndex.value > 0 ? navItems.value[currentIndex.value - 1] : undefined,
+)
+const nextSection = computed(() => {
+  const index = currentIndex.value
+  return index >= 0 && index < navItems.value.length - 1
+    ? navItems.value[index + 1]
+    : undefined
 })
 
-defineExpose({ jumpTo })
+const sectionProgress = computed(() => {
+  const total = navItems.value.length
+  const current = Math.max(currentIndex.value + 1, 1)
+  return `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+})
+
+function goToSection(item: NavItem | undefined) {
+  if (!item) return
+  emit('select-section', item.key as SetupSectionKey)
+}
 
 const annual = computed(() => result.value.annual)
 const monthsWorked = computed(
@@ -165,7 +152,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   <section class="setup">
     <div class="setup__grid">
       <div class="setup__main">
-        <section id="section-period" class="panel">
+        <section v-if="section === 'period'" id="section-period" class="panel">
           <header class="panel__head">
             <span class="panel__index">01</span>
             <div class="panel__titles">
@@ -214,7 +201,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
           </div>
         </section>
 
-        <section id="section-income" class="panel">
+        <section v-if="section === 'income'" id="section-income" class="panel">
           <header class="panel__head">
             <span class="panel__index">02</span>
             <div class="panel__titles">
@@ -228,7 +215,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
           </div>
         </section>
 
-        <section id="section-insurance" class="panel">
+        <section v-if="section === 'insurance'" id="section-insurance" class="panel">
           <header class="panel__head">
             <span class="panel__index">03</span>
             <div class="panel__titles">
@@ -242,7 +229,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
           </div>
         </section>
 
-        <section id="section-stage" class="panel">
+        <section v-if="section === 'stage'" id="section-stage" class="panel">
           <header class="panel__head">
             <span class="panel__index">04</span>
             <div class="panel__titles">
@@ -250,23 +237,13 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
               <p class="panel__desc">按月份划分实习期 / 试用期 / 转正后，分别设置发放金额与社保缴纳</p>
             </div>
             <span class="panel__meta">{{ salaryStore.stages.length }} 段</span>
-            <button
-              type="button"
-              class="panel__toggle"
-              :aria-expanded="isOpen('stage')"
-              aria-controls="section-body-stage"
-              @click="toggleSection('stage')"
-            >
-              {{ isOpen('stage') ? '收起' : '展开' }}
-              <el-icon :class="{ 'is-open': isOpen('stage') }"><ArrowDown /></el-icon>
-            </button>
           </header>
-          <div v-if="isOpen('stage')" id="section-body-stage" class="panel__body">
+          <div class="panel__body">
             <StageEditor />
           </div>
         </section>
 
-        <section id="section-deduction" class="panel">
+        <section v-if="section === 'deduction'" id="section-deduction" class="panel">
           <header class="panel__head">
             <span class="panel__index">05</span>
             <div class="panel__titles">
@@ -274,23 +251,13 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
               <p class="panel__desc">11 个项目，自动处理起付线、年度限额与互斥校验</p>
             </div>
             <span class="panel__meta">{{ enabledDeductionCount }} 项已启用</span>
-            <button
-              type="button"
-              class="panel__toggle"
-              :aria-expanded="isOpen('deduction')"
-              aria-controls="section-body-deduction"
-              @click="toggleSection('deduction')"
-            >
-              {{ isOpen('deduction') ? '收起' : '展开' }}
-              <el-icon :class="{ 'is-open': isOpen('deduction') }"><ArrowDown /></el-icon>
-            </button>
           </header>
-          <div v-if="isOpen('deduction')" id="section-body-deduction" class="panel__body">
+          <div class="panel__body">
             <DeductionEditor />
           </div>
         </section>
 
-        <section id="section-posttax" class="panel">
+        <section v-if="section === 'posttax'" id="section-posttax" class="panel">
           <header class="panel__head">
             <span class="panel__index">06</span>
             <div class="panel__titles">
@@ -300,23 +267,13 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
               </p>
             </div>
             <span class="panel__meta">{{ enabledPostTaxCount }} 项已启用</span>
-            <button
-              type="button"
-              class="panel__toggle"
-              :aria-expanded="isOpen('posttax')"
-              aria-controls="section-body-posttax"
-              @click="toggleSection('posttax')"
-            >
-              {{ isOpen('posttax') ? '收起' : '展开' }}
-              <el-icon :class="{ 'is-open': isOpen('posttax') }"><ArrowDown /></el-icon>
-            </button>
           </header>
-          <div v-if="isOpen('posttax')" id="section-body-posttax" class="panel__body">
+          <div class="panel__body">
             <PostTaxDeductionEditor />
           </div>
         </section>
 
-        <section id="section-advanced" class="panel">
+        <section v-if="section === 'advanced'" id="section-advanced" class="panel">
           <header class="panel__head">
             <span class="panel__index">07</span>
             <div class="panel__titles">
@@ -324,18 +281,8 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
               <p class="panel__desc">纳税人身份、每月减免税额与年终奖计税口径</p>
             </div>
             <span class="panel__meta">{{ taxpayerLabel }}</span>
-            <button
-              type="button"
-              class="panel__toggle"
-              :aria-expanded="isOpen('advanced')"
-              aria-controls="section-body-advanced"
-              @click="toggleSection('advanced')"
-            >
-              {{ isOpen('advanced') ? '收起' : '展开' }}
-              <el-icon :class="{ 'is-open': isOpen('advanced') }"><ArrowDown /></el-icon>
-            </button>
           </header>
-          <div v-if="isOpen('advanced')" id="section-body-advanced" class="panel__body">
+          <div class="panel__body">
             <el-form label-width="110px" size="small">
               <el-form-item label="纳税人身份">
                 <el-radio-group v-model="settingsStore.taxpayerType">
@@ -368,12 +315,26 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
             <el-alert :closable="false" type="info" :title="POLICY_DISCLAIMER" />
           </div>
         </section>
+
+        <div class="setup__pager">
+          <span class="setup__pager-progress">{{ sectionProgress }}</span>
+          <el-button v-if="prevSection" size="small" @click="goToSection(prevSection)">
+            ← {{ prevSection.label }}
+          </el-button>
+          <span class="setup__pager-spacer" />
+          <el-button v-if="nextSection" size="small" @click="goToSection(nextSection)">
+            {{ nextSection.label }} →
+          </el-button>
+          <el-button v-else size="small" type="primary" @click="emit('next')">
+            查看月度明细 →
+          </el-button>
+        </div>
       </div>
 
       <aside class="setup__aside" aria-label="实时结果">
         <div class="payslip">
           <div class="payslip__head">
-            <span class="payslip__eyebrow">实时结果</span>
+            <span class="payslip__eyebrow">年度工资条</span>
             <span class="payslip__range">{{ settingsStore.rangeText }}</span>
           </div>
 
@@ -452,7 +413,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -484,44 +445,49 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   scroll-margin-top: 12px;
 }
 
+/* 账本式页眉：大号衬线章节号 + 竖分隔线 + 标题说明 */
 .panel__head {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 16px 18px 13px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 18px 20px 16px;
   border-bottom: 1px solid var(--app-line);
 }
 
 .panel__index {
-  margin-top: 1px;
-  padding: 3px 6px;
-  border-radius: 6px;
-  color: var(--app-jade-700);
-  background: var(--app-jade-100);
-  font-family: var(--app-font-num);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  min-width: 36px;
+  margin: 0;
+  padding: 0 2px 0 0;
+  color: var(--app-ink-900);
+  font-family: var(--app-font-ledger);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
 }
 
 .panel__titles {
-  flex: 1;
   min-width: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--app-line);
 }
 
 .panel__title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--app-ink-900);
 }
 
 .panel__desc {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 12px;
+  line-height: 1.55;
   color: var(--app-ink-500);
 }
 
 .panel__meta {
+  margin-top: 2px;
   padding: 3px 10px;
   border: 1px solid var(--app-line);
   border-radius: 999px;
@@ -531,30 +497,51 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   white-space: nowrap;
 }
 
-.panel__toggle {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  padding: 4px 2px;
-  border: 0;
-  background: transparent;
-  color: var(--app-jade-700);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.panel__toggle .el-icon {
-  transition: transform 0.2s;
-}
-
-.panel__toggle .el-icon.is-open {
-  transform: rotate(180deg);
-}
-
 .panel__body {
-  padding: 16px 18px 18px;
+  padding: 18px 20px 20px;
+}
+
+/* 分页切换时给内容一个轻微入场，强化「换了一页」的感觉 */
+.setup__main > .panel {
+  animation: setup-page-in 0.18s ease;
+}
+
+/* 分页页脚：像账本页脚一样标出「第几页 / 共几页」 */
+.setup__pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px 6px;
+  border-top: 1px dashed var(--app-line-strong);
+}
+
+.setup__pager-progress {
+  color: var(--app-ink-500);
+  font-family: var(--app-font-ledger);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+}
+
+.setup__pager-spacer {
+  flex: 1;
+}
+
+@keyframes setup-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup__main > .panel {
+    animation: none;
+  }
 }
 
 .setup__period {
@@ -614,11 +601,11 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
   color: #7dd3c7;
-  text-transform: uppercase;
+  font-family: var(--app-font-ledger);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
 }
 
 .payslip__range {
@@ -810,15 +797,23 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   }
 
   .panel__head {
-    flex-wrap: wrap;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding: 15px 16px 13px;
+  }
+
+  .panel__index {
+    min-width: 30px;
+    font-size: 24px;
   }
 
   .panel__meta {
-    order: 4;
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
-  .panel__toggle {
-    margin-left: auto;
+  .panel__body {
+    padding: 15px 16px 17px;
   }
 
   .payslip__legend {
