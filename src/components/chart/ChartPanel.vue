@@ -17,6 +17,15 @@ import VChart from 'vue-echarts'
 import { INSURANCE_LABELS } from '@/config/columns'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 
+interface Props {
+  /** 渲染哪些图表：trend 趋势 / structure 收入去向 / insurance 五险一金 / all 全部 */
+  mode?: 'trend' | 'structure' | 'insurance' | 'all'
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  mode: 'all',
+})
+
 // 按需注册 ECharts 模块，避免把整个图表库打进首屏
 use([CanvasRenderer, BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent])
 
@@ -24,46 +33,101 @@ const { result } = useSalaryCalculator()
 
 const months = computed(() => result.value.monthly.map((item) => `${item.month} 月`))
 
+/* 图表配色：与全局「墨蓝 + 玉石绿 + 琥珀」一致，不再用 Element 默认蓝红 */
+const CHART = {
+  ink: '#16233a',
+  jade: '#0f766e',
+  slate: '#8fa3ba',
+  slateDark: '#4b5b72',
+  amber: '#e9a23b',
+  text: '#64748b',
+  line: '#dfe6ee',
+  lineStrong: '#c9d4e0',
+} as const
+
+const baseTooltip = {
+  backgroundColor: '#fff',
+  borderColor: CHART.lineStrong,
+  borderWidth: 1,
+  padding: [8, 12] as [number, number],
+  textStyle: { color: CHART.ink, fontSize: 12 },
+  extraCssText: 'box-shadow: 0 12px 32px -12px rgb(22 35 58 / 18%); border-radius: 8px;',
+}
+
+const baseLegend = {
+  itemWidth: 10,
+  itemHeight: 10,
+  itemGap: 16,
+  textStyle: { color: CHART.text, fontSize: 12 },
+}
+
 const trendOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  legend: { data: ['应发', '到手', '个税'] },
-  grid: { left: 60, right: 24, top: 40, bottom: 30 },
-  xAxis: { type: 'category', data: months.value },
-  yAxis: { type: 'value', name: '元' },
+  color: [CHART.slate, CHART.jade, CHART.amber],
+  tooltip: {
+    ...baseTooltip,
+    trigger: 'axis',
+    valueFormatter: (value: unknown) => `¥${Number(value).toLocaleString('zh-CN')}`,
+  },
+  legend: { ...baseLegend, data: ['应发', '到手', '个税'] },
+  grid: { left: 64, right: 24, top: 44, bottom: 28 },
+  xAxis: {
+    type: 'category',
+    data: months.value,
+    axisTick: { show: false },
+    axisLine: { lineStyle: { color: CHART.lineStrong } },
+    axisLabel: { color: CHART.text, fontSize: 11 },
+  },
+  yAxis: {
+    type: 'value',
+    name: '元',
+    axisLabel: { color: CHART.text, fontSize: 11 },
+    splitLine: { lineStyle: { color: CHART.line } },
+  },
   series: [
     {
       name: '应发',
       type: 'bar',
+      barMaxWidth: 26,
+      itemStyle: { color: CHART.slate, borderRadius: [4, 4, 0, 0] },
       data: result.value.monthly.map((item) => item.gross),
-      itemStyle: { color: '#a3c4f3' },
     },
     {
       name: '到手',
       type: 'bar',
+      barMaxWidth: 26,
+      itemStyle: { color: CHART.jade, borderRadius: [4, 4, 0, 0] },
       data: result.value.monthly.map((item) => item.net),
-      itemStyle: { color: '#409eff' },
     },
     {
       name: '个税',
       type: 'line',
       smooth: true,
+      symbolSize: 6,
+      itemStyle: { color: CHART.amber },
+      lineStyle: { width: 2.5 },
+      areaStyle: { color: CHART.amber, opacity: 0.12 },
       data: result.value.monthly.map((item) => item.taxTotal),
-      itemStyle: { color: '#f56c6c' },
     },
   ],
 }))
 
+/* 与结算卡组成条同一套段色，图表与卡片可以互相印证 */
+const SEGMENT_COLORS = [CHART.jade, CHART.slate, CHART.amber, CHART.slateDark]
+
 const structureOption = computed(() => {
   const annual = result.value.annual
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { bottom: 0 },
+    color: SEGMENT_COLORS,
+    tooltip: { ...baseTooltip, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { ...baseLegend, bottom: 0 },
     series: [
       {
         type: 'pie',
         radius: ['45%', '70%'],
         avoidLabelOverlap: true,
-        label: { formatter: '{b}\n{d}%' },
+        label: { formatter: '{b}\n{d}%', color: CHART.text, fontSize: 11 },
+        labelLine: { lineStyle: { color: CHART.lineStrong } },
+        emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(22, 35, 58, 0.28)' } },
         // 非现金收入含在应发中但不计入到手，单列一片才能让饼图合计等于应发
         data: [
           { name: '到手工资', value: annual.net },
@@ -78,14 +142,19 @@ const structureOption = computed(() => {
   }
 })
 
+/* 五险一金用玉绿阶梯 + 琥珀公积金，与主色一致 */
+const INSURANCE_COLORS = ['#0f766e', '#4f9a93', '#87bcb6', '#b9d8d4', '#8fa3ba', '#e9a23b']
+
 const insuranceOption = computed(() => ({
-  tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-  legend: { bottom: 0 },
+  color: INSURANCE_COLORS,
+  tooltip: { ...baseTooltip, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+  legend: { ...baseLegend, bottom: 0 },
   series: [
     {
       type: 'pie',
       radius: '65%',
-      label: { formatter: '{b}\n{d}%' },
+      label: { formatter: '{b}\n{d}%', color: CHART.text, fontSize: 11 },
+      labelLine: { lineStyle: { color: CHART.lineStrong } },
       data: result.value.insuranceAnnual
         .filter((item) => item.personal > 0)
         .map((item) => ({ name: INSURANCE_LABELS[item.type], value: item.personal })),
@@ -96,15 +165,27 @@ const insuranceOption = computed(() => ({
 
 <template>
   <div class="chart-panel">
-    <el-card shadow="never" class="chart-card">
+    <el-card
+      v-if="props.mode === 'all' || props.mode === 'trend'"
+      shadow="never"
+      class="chart-card"
+    >
       <template #header>月度应发 / 到手 / 个税趋势</template>
       <v-chart class="chart" :option="trendOption" autoresize />
     </el-card>
-    <el-card shadow="never" class="chart-card">
+    <el-card
+      v-if="props.mode === 'all' || props.mode === 'structure'"
+      shadow="never"
+      class="chart-card"
+    >
       <template #header>年度收入去向</template>
       <v-chart class="chart" :option="structureOption" autoresize />
     </el-card>
-    <el-card shadow="never" class="chart-card">
+    <el-card
+      v-if="props.mode === 'all' || props.mode === 'insurance'"
+      shadow="never"
+      class="chart-card"
+    >
       <template #header>五险一金个人缴纳占比</template>
       <v-chart class="chart" :option="insuranceOption" autoresize />
     </el-card>
@@ -119,9 +200,20 @@ const insuranceOption = computed(() => ({
 }
 
 .chart-card :deep(.el-card__header) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.chart-card :deep(.el-card__header::before) {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--app-jade-600);
+  content: '';
 }
 
 .chart {

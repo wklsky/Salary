@@ -82,7 +82,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 .section-panel__desc {
   margin: 3px 0 0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--app-ink-500);
 }

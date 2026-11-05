@@ -23,7 +23,7 @@ const monthCount = computed({
 
 <template>
   <div class="period-form">
-    <el-form label-width="96px" size="small" class="period-form__grid">
+    <el-form label-width="96px" class="period-form__grid">
       <el-form-item label="计算年度">
         <el-input-number
           v-model="settingsStore.year"

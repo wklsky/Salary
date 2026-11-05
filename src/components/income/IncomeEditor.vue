@@ -136,11 +136,10 @@ const annualTotal = computed(() => result.value.annual.gross)
       >
         <div class="income-item__head">
           <el-switch v-model="item.enabled" size="small" />
-          <el-input v-model="item.name" size="small" class="income-item__name" placeholder="项目名称" />
+          <el-input v-model="item.name" class="income-item__name" placeholder="项目名称" />
           <template v-if="item.scoreBased">
             <MoneyInput
               :model-value="item.perPointAmount ?? 0"
-              size="small"
               class="income-item__amount"
               @update:model-value="
                 (value: number) => store.updateIncome(item.id, { perPointAmount: value })
@@ -151,14 +150,12 @@ const annualTotal = computed(() => result.value.annual.gross)
           <MoneyInput
             v-else
             :model-value="item.amount"
-            size="small"
             class="income-item__amount"
             @update:model-value="(value) => store.updateIncome(item.id, { amount: value })"
           />
           <el-select
             v-if="!item.scoreBased"
             v-model="item.cycle"
-            size="small"
             class="income-item__cycle"
           >
             <el-option
@@ -171,7 +168,6 @@ const annualTotal = computed(() => result.value.annual.gross)
           <el-select
             v-if="!item.scoreBased && item.cycle === 'once'"
             v-model="item.month"
-            size="small"
             class="income-item__month"
           >
             <el-option
@@ -207,7 +203,7 @@ const annualTotal = computed(() => result.value.annual.gross)
         </div>
 
         <div class="income-item__foot">
-          <el-select v-model="item.kind" size="small" class="income-item__kind">
+          <el-select v-model="item.kind" class="income-item__kind">
             <el-option
               v-for="option in KIND_OPTIONS"
               :key="option.value"
@@ -271,7 +267,6 @@ const annualTotal = computed(() => result.value.annual.gross)
             <MoneyInput
               v-if="isStageOn(item, type) && !item.variableByMonth"
               :model-value="stageAmountOf(item, type)"
-              size="small"
               @update:model-value="
                 (value: number) => store.updateStageAmount(item.id, type, value)
               "
@@ -286,7 +281,6 @@ const annualTotal = computed(() => result.value.annual.gross)
             <span class="month-cell__label">{{ month }} 月</span>
             <MoneyInput
               :model-value="monthlyAmountOf(item, month)"
-              size="small"
               @update:model-value="
                 (value: number) => store.updateMonthlyAmount(item.id, month, value)
               "
@@ -306,7 +300,6 @@ const annualTotal = computed(() => result.value.annual.gross)
               :max="999"
               :step="1"
               :precision="2"
-              size="small"
               controls-position="right"
               class="month-cell__score"
               @update:model-value="
@@ -326,11 +319,11 @@ const annualTotal = computed(() => result.value.annual.gross)
     </ul>
 
     <footer class="income-editor__actions">
-      <el-button :icon="Plus" size="small" @click="store.addIncome('salary')">新增收入项</el-button>
-      <el-button :icon="Plus" size="small" type="warning" plain @click="store.addIncome('bonus')">
+      <el-button :icon="Plus" @click="store.addIncome('salary')">新增收入项</el-button>
+      <el-button :icon="Plus" type="warning" plain @click="store.addIncome('bonus')">
         新增年终奖
       </el-button>
-      <el-button :icon="Plus" size="small" plain @click="store.addIncome('labor')">
+      <el-button :icon="Plus" plain @click="store.addIncome('labor')">
         新增劳务报酬
       </el-button>
     </footer>
@@ -407,6 +400,38 @@ const annualTotal = computed(() => result.value.annual.gross)
   flex-wrap: wrap;
 }
 
+/* 宽屏固定列：开关/名称/金额/周期/月份/操作各占一列，多条收入项纵向对齐 */
+@media (min-width: 900px) {
+  .income-item__head {
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1fr) 160px auto 88px auto;
+  }
+
+  .income-item__name {
+    grid-column: 2;
+  }
+
+  .income-item__amount {
+    grid-column: 3;
+  }
+
+  .income-item__unit {
+    grid-column: 4;
+  }
+
+  .income-item__cycle {
+    grid-column: 4;
+  }
+
+  .income-item__month {
+    grid-column: 5;
+  }
+
+  .income-item__ops {
+    grid-column: 6;
+  }
+}
+
 .income-item__name {
   flex: 1 1 140px;
   min-width: 120px;
@@ -414,7 +439,7 @@ const annualTotal = computed(() => result.value.annual.gross)
 
 /* 金额/周期固定宽度，窄屏时靠 flex-wrap 换行而不是被压扁 */
 .income-item__amount {
-  width: 150px;
+  width: 160px;
 }
 
 .income-item__cycle {
@@ -472,15 +497,15 @@ const annualTotal = computed(() => result.value.annual.gross)
 }
 
 .stage-cell__off {
-  height: 24px;
+  height: 32px;
   font-size: 12px;
-  line-height: 24px;
+  line-height: 32px;
   color: var(--el-text-color-placeholder);
 }
 
 .income-item__months {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 6px;
 }
 
@@ -500,7 +525,7 @@ const annualTotal = computed(() => result.value.annual.gross)
 }
 
 .month-cell__amount {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--el-text-color-placeholder);
   font-variant-numeric: tabular-nums;
 }

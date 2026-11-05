@@ -5,6 +5,7 @@
  * @Description: 录入设置视图：按分页组合章节面板与实时工资条
  */
 import { computed, watch } from 'vue'
+import { useWindowSize } from '@vueuse/core'
 import PagePager from '@/components/common/PagePager.vue'
 import SectionPanel from '@/components/common/SectionPanel.vue'
 import AdvancedForm from '@/components/setup/AdvancedForm.vue'
@@ -41,6 +42,15 @@ const emit = defineEmits<{
 
 const salaryStore = useSalaryStore()
 const settingsStore = useSettingsStore()
+
+/** 窗口较窄（结果卡下移的断点）时，改在目录条下方插一张横向紧凑结果卡 */
+const { width: windowWidth } = useWindowSize()
+const isCompact = computed(() => windowWidth.value <= 1200)
+/**
+ * 桌面端侧边栏已提供「本页目录」，页内目录条只在窄屏（侧边栏收进抽屉）时出现，
+ * 避免同一份 01–07 目录在两处重复出现
+ */
+const showStepper = computed(() => windowWidth.value <= 960)
 
 const cityName = computed(() => resolveCity(salaryStore.insurance.cityCode).name)
 const enabledDeductionCount = computed(
@@ -93,8 +103,29 @@ function goToSection(item: NavItem | undefined) {
 
 <template>
   <section class="setup">
-    <div class="setup__grid">
+    <div class="setup__grid" :class="{ 'setup__grid--single': isCompact }">
       <div class="setup__main">
+        <nav v-if="showStepper" class="setup__stepper" aria-label="录入分区目录">
+          <button
+            v-for="(item, index) in navItems"
+            :key="item.key"
+            type="button"
+            class="stepper-item"
+            :class="{
+              'is-active': item.key === section,
+              'is-done': index < currentIndex,
+            }"
+            @click="goToSection(item)"
+          >
+            <span class="stepper-item__state" aria-hidden="true">
+              <template v-if="index < currentIndex">✓</template>
+              <template v-else>{{ item.index }}</template>
+            </span>
+            <span class="stepper-item__label">{{ item.label }}</span>
+          </button>
+        </nav>
+        <!-- 窄屏时结果卡落不进右栏，改在目录条下方放一张横向紧凑版，保证录入时看得到结果 -->
+        <PayslipCard v-if="isCompact" compact @next="emit('next')" />
         <SectionPanel
           v-if="section === 'period'"
           index="01"
@@ -176,7 +207,7 @@ function goToSection(item: NavItem | undefined) {
         />
       </div>
 
-      <aside class="setup__aside" aria-label="实时结果">
+      <aside v-if="!isCompact" class="setup__aside" aria-label="实时结果">
         <PayslipCard @next="emit('next')" />
       </aside>
     </div>
@@ -209,6 +240,80 @@ function goToSection(item: NavItem | undefined) {
   top: 12px;
 }
 
+/* 窗口较窄时右侧结果卡不存在，主表单独占一行 */
+.setup__grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 分区目录条：贴顶、可直达任意分区，已完成打勾、当前高亮 */
+.setup__stepper {
+  position: sticky;
+  top: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-md);
+  box-shadow: 0 6px 18px -14px rgb(22 35 58 / 22%);
+}
+
+.stepper-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-ink-500);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.stepper-item:hover {
+  background: var(--app-paper);
+  border-color: var(--app-line-strong);
+  color: var(--app-ink-700);
+}
+
+.stepper-item__state {
+  min-width: 20px;
+  text-align: center;
+  font-family: var(--app-font-ledger), serif;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--app-ink-300);
+}
+
+.stepper-item.is-active {
+  background: var(--app-jade-100);
+  border-color: var(--app-jade-600);
+  color: var(--app-jade-700);
+  font-weight: 600;
+}
+
+.stepper-item.is-active .stepper-item__state {
+  color: var(--app-jade-600);
+}
+
+.stepper-item.is-done {
+  color: var(--app-ink-500);
+}
+
+.stepper-item.is-done .stepper-item__state {
+  color: var(--app-jade-600);
+}
+
 /* 分页切换时给内容一个轻微入场，强化「换了一页」的感觉 */
 .setup__main > .section-panel {
   animation: setup-page-in 0.18s ease;
@@ -223,18 +328,6 @@ function goToSection(item: NavItem | undefined) {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-/* 侧边栏占用约 220px，较窄的桌面也需要把结果卡移到主表单下方 */
-@media (max-width: 1200px) {
-  .setup__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .setup__aside {
-    position: static;
-    order: 2;
   }
 }
 

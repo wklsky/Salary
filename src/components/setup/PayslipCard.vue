@@ -6,10 +6,20 @@
  */
 import { computed } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
+import { useCountUp } from '@/composables/useCountUp'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { round2 } from '@/core'
 import { formatMoney, formatPercent } from '@/utils/format'
+
+interface Props {
+  /** 紧凑横向模式：窄屏下插在分区目录条下方使用 */
+  compact?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  compact: false,
+})
 
 const emit = defineEmits<{
   next: []
@@ -19,6 +29,9 @@ const settingsStore = useSettingsStore()
 const { result } = useSalaryCalculator()
 
 const annual = computed(() => result.value.annual)
+
+/** 工资条主数字：每次进入录入视图时滚动一次 */
+const animatedNet = useCountUp(computed(() => annual.value.net))
 const monthsWorked = computed(
   () => Math.max(1, settingsStore.endMonth - settingsStore.startMonth + 1),
 )
@@ -54,7 +67,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 </script>
 
 <template>
-  <div class="payslip">
+  <div class="payslip" :class="{ 'payslip--compact': props.compact }">
     <div class="payslip__head">
       <span class="payslip__eyebrow">年度工资条</span>
       <span class="payslip__range">{{ settingsStore.rangeText }}</span>
@@ -63,7 +76,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
     <div class="payslip__hero">
       <span class="payslip__label">年度到手</span>
       <div class="payslip__value num">
-        <span class="payslip__currency">¥</span>{{ formatMoney(annual.net) }}
+        <span class="payslip__currency">¥</span>{{ formatMoney(animatedNet) }}
       </div>
       <span class="payslip__sub">
         月均 ¥{{ formatMoney(round2(annual.net / monthsWorked)) }} · 到手占比
@@ -118,7 +131,12 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
       </div>
     </dl>
 
-    <el-button type="primary" class="payslip__cta" @click="emit('next')">
+    <el-button
+      type="primary"
+      class="payslip__cta"
+      :size="props.compact ? 'small' : 'default'"
+      @click="emit('next')"
+    >
       查看月度明细
       <el-icon class="payslip__cta-icon"><ArrowRight /></el-icon>
     </el-button>
@@ -172,7 +190,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__range {
-  font-size: 11px;
+  font-size: 12px;
   color: #9fb0c6;
 }
 
@@ -202,7 +220,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__sub {
-  font-size: 11px;
+  font-size: 12px;
   color: #9fb0c6;
 }
 
@@ -257,13 +275,13 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   display: flex;
   gap: 7px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   color: #c3cfdf;
 }
 
 .payslip__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
@@ -273,7 +291,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .payslip__legend-value {
   color: #eef3f9;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .payslip__ledger {
@@ -289,7 +307,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 12px;
+  font-size: 13px;
   color: #a9b8cc;
 }
 
@@ -337,14 +355,74 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .payslip__hint {
   margin-top: 8px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: #8496ad;
   text-align: center;
+}
+
+/* 紧凑横向变体：窄屏下作为录入页顶部的实时结果条，隐藏明细只留核心数字 */
+.payslip--compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head head'
+    'hero bar'
+    'hero cta';
+  gap: 3px 18px;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.payslip--compact .payslip__head {
+  grid-area: head;
+}
+
+.payslip--compact .payslip__hero {
+  grid-area: hero;
+  margin-top: 0;
+  gap: 1px;
+}
+
+.payslip--compact .payslip__value {
+  font-size: 24px;
+}
+
+.payslip--compact .payslip__bar {
+  grid-area: bar;
+  align-self: end;
+  min-width: 140px;
+  margin-top: 0;
+}
+
+.payslip--compact .payslip__cta {
+  grid-area: cta;
+  align-self: end;
+  width: auto;
+  margin-top: 0;
+}
+
+.payslip--compact .payslip__legend,
+.payslip--compact .payslip__ledger,
+.payslip--compact .payslip__hint {
+  display: none;
 }
 
 @media (max-width: 640px) {
   .payslip__legend {
     grid-template-columns: 1fr;
+  }
+
+  /* 更窄时结果条退化为两行：数值一行、比例条与按钮一行 */
+  .payslip--compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'head head'
+      'hero hero'
+      'bar cta';
+  }
+
+  .payslip--compact .payslip__bar {
+    min-width: 0;
   }
 }
 </style>

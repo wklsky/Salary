@@ -11,10 +11,10 @@ import { useWindowSize } from '@vueuse/core'
 import AdminSidebar from '@/components/layout/AdminSidebar.vue'
 import SetupView from '@/components/layout/SetupView.vue'
 import TableView from '@/components/layout/TableView.vue'
-import ViewTabs from '@/components/layout/ViewTabs.vue'
 import ColumnConfigDrawer from '@/components/table-config/ColumnConfigDrawer.vue'
 import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import { useExport } from '@/composables/useExport'
+import { useCountUp } from '@/composables/useCountUp'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -60,11 +60,6 @@ const { width: windowWidth } = useWindowSize()
 const sidebarCollapsed = ref(false)
 const isNarrow = computed(() => windowWidth.value <= 960)
 
-const viewTabs: { value: AppView; label: string }[] = [
-  { value: 'setup', label: '录入设置' },
-  { value: 'table', label: '月度明细' },
-]
-
 function onSelectView(next: AppView) {
   navDrawerVisible.value = false
   if (view.value === next) return
@@ -104,6 +99,13 @@ function onTableSections(items: NavItem[]) {
 function onNavSelect(key: string) {
   navDrawerVisible.value = false
   if (!key) return
+  activeSection.value = key
+}
+
+/** 结果视图的引导入口：跳回录入视图并直达指定分区（如年终奖引导 → 收入项） */
+function onGotoSetupSection(key: SetupSectionKey) {
+  navDrawerVisible.value = false
+  view.value = 'setup'
   activeSection.value = key
 }
 
@@ -151,6 +153,8 @@ watch(
 
 /** 年度到手，用于顶栏常驻展示，切换视图时也能一眼看到结果 */
 const annualNet = computed(() => result.value.annual.net)
+/** 挂载时滚动一次即可，之后直接跟随结果变化 */
+const animatedAnnualNet = useCountUp(annualNet)
 
 async function onExportJson() {
   exportJson(
@@ -372,7 +376,7 @@ function onCommand(command: string) {
         <div class="app__actions">
           <div class="app__net">
             <span class="app__net-label">年度到手</span>
-            <strong class="app__net-value num">¥{{ annualNet.toLocaleString('zh-CN') }}</strong>
+            <strong class="app__net-value num">¥{{ animatedAnnualNet.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) }}</strong>
           </div>
           <el-select v-model="activeSchemeId" size="small" placeholder="方案存档" class="scheme-select">
             <el-option
@@ -414,13 +418,6 @@ function onCommand(command: string) {
         />
       </header>
 
-      <div class="app__tags">
-        <ViewTabs :model-value="view" :items="viewTabs" @update:model-value="onSelectView" />
-        <span v-if="activeSectionLabel" class="app__tags-hint">
-          当前板块：{{ activeSectionLabel }}
-        </span>
-      </div>
-
       <main ref="bodyRef" class="app__body">
         <SetupView
           v-if="view === 'setup'"
@@ -436,6 +433,7 @@ function onCommand(command: string) {
           @config-columns="drawerVisible = true"
           @sections="onTableSections"
           @select-section="onNavSelect"
+          @goto-income="onGotoSetupSection('income')"
         />
       </main>
 
@@ -607,32 +605,6 @@ function onCommand(command: string) {
   width: 148px;
 }
 
-/* 标签页视图：固定当前打开的两个工作视图 */
-.app__tags {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 36px;
-  padding: 3px 18px;
-  overflow: hidden;
-  background: var(--app-surface);
-  border-bottom: 1px solid var(--app-line);
-}
-
-.app__tags :deep(.el-tabs) {
-  flex: 1;
-  min-width: 0;
-}
-
-.app__tags-hint {
-  flex: none;
-  color: var(--app-ink-300);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .app__body {
   flex: 1 1 auto;
   min-width: 0;
@@ -673,20 +645,12 @@ function onCommand(command: string) {
   .app__sidebar-wrap {
     display: none;
   }
-
-  .app__tags-hint {
-    display: none;
-  }
 }
 
 @media (max-width: 860px) {
   .app__navbar {
     gap: 8px;
     padding: 6px 12px;
-  }
-
-  .app__tags {
-    padding: 3px 12px;
   }
 
   .app__policy {

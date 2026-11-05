@@ -170,6 +170,17 @@ function sectionTitle(item: NavItem): string {
   scrollbar-width: thin;
 }
 
+.admin-sidebar__scroll::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 16%);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 8px;
+}
+
+.admin-sidebar__scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #7dd3c7;
+}
+
 .admin-menu {
   display: flex;
   flex-direction: column;

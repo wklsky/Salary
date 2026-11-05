@@ -40,7 +40,7 @@
 - 切换视图或分页不会丢失录入，顶栏常驻展示年度到手
 
 **组件拆分**
-- 页面外壳：`AdminSidebar`（深色菜单）、`ViewTabs`（`el-tabs` 标签页）、`PagePager`（账本式分页页脚）
+- 页面外壳：`AdminSidebar`（深色菜单，唯一导航入口）、`PagePager`（账本式分页页脚）
 - 录入设置：`SectionPanel`（`el-card` 章节容器）+ `PeriodForm` / `IncomeEditor` / `InsuranceEditor` / `StageEditor` / `DeductionEditor` / `PostTaxDeductionEditor` / `AdvancedForm`
 - 实时结果：`PayslipCard`（独立工资条组件）
 - 月度明细：`ResultCards` / `BonusAdvice` / `MonthlyTable` / `AnnualTable` / `ChartPanel`
@@ -229,7 +229,7 @@ src/
 ├── components/
 │   ├── common/      # SectionPanel / PagePager / MoneyInput 等通用组件
 │   ├── setup/       # PeriodForm / AdvancedForm / PayslipCard
-│   ├── layout/      # App 外壳、AdminSidebar、ViewTabs、两个视图
+│   ├── layout/      # App 外壳、AdminSidebar、两个视图
 │   ├── month/       # 单月数据编辑抽屉
 │   ├── income/ insurance/ deduction/ stage/  # 各类录入面板
 │   └── result/ table-config/ chart/          # 结果表、列配置、图表

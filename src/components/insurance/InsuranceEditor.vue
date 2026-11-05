@@ -106,7 +106,7 @@ function applyHousingFundPreset(percent: number) {
 
 <template>
   <section class="insurance-editor">
-    <el-form label-width="96px" size="small">
+    <el-form label-width="96px">
       <el-form-item label="参保城市">
         <el-select v-model="store.insurance.cityCode" filterable class="full-width">
           <el-option
@@ -118,72 +118,79 @@ function applyHousingFundPreset(percent: number) {
         </el-select>
       </el-form-item>
 
-      <el-form-item label="缴费基数">
-        <el-radio-group v-model="store.insurance.baseMode">
-          <el-radio
-            v-for="option in BASE_MODE_OPTIONS"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </el-radio>
-        </el-radio-group>
-      </el-form-item>
+      <div class="insurance-form__columns">
+        <div class="insurance-form__column">
+          <el-form-item label="缴费基数">
+            <el-radio-group v-model="store.insurance.baseMode">
+              <el-radio
+                v-for="option in BASE_MODE_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </el-radio>
+            </el-radio-group>
+          </el-form-item>
 
-      <el-form-item label=" ">
-        <span class="inline-tip">
-          法定口径为本人上年度月平均工资；选「按当年应发」时基数会随当年调薪波动，仅作近似
-        </span>
-      </el-form-item>
+          <el-form-item label=" ">
+            <span class="inline-tip">
+              法定口径为本人上年度月平均工资；选「按当年应发」时基数会随当年调薪波动，仅作近似
+            </span>
+          </el-form-item>
 
-      <el-form-item v-if="needManualBase" label="基数值">
-        <el-input-number
-          v-model="store.insurance.manualBase"
-          :min="0"
-          :step="500"
-          :precision="0"
-          controls-position="right"
-          class="full-width"
-        />
-      </el-form-item>
+          <el-form-item v-if="needManualBase" label="基数值">
+            <el-input-number
+              v-model="store.insurance.manualBase"
+              :min="0"
+              :step="500"
+              :precision="0"
+              controls-position="right"
+              class="insurance-editor__money"
+            />
+          </el-form-item>
 
-      <el-form-item label="封顶托底">
-        <el-switch v-model="store.insurance.clampEnabled" />
-        <span class="inline-tip">
-          社保基数上下限 {{ formatMoney(city.base.lower) }} ~ {{ formatMoney(city.base.upper) }}
-          （{{ city.referenceYear }} 年参考值）
-        </span>
-      </el-form-item>
+          <el-form-item label="封顶托底">
+            <el-switch v-model="store.insurance.clampEnabled" />
+            <span class="inline-tip">
+              社保基数上下限 {{ formatMoney(city.base.lower) }} ~
+              {{ formatMoney(city.base.upper) }}
+              （{{ city.referenceYear }} 年参考值）
+            </span>
+          </el-form-item>
+        </div>
 
-      <el-form-item label="公积金基数">
-        <el-select v-model="store.insurance.housingFundBaseMode" class="full-width">
-          <el-option
-            v-for="option in HOUSING_FUND_BASE_MODE_OPTIONS"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          />
-        </el-select>
-      </el-form-item>
+        <div class="insurance-form__column">
+          <el-form-item label="公积金基数">
+            <el-select v-model="store.insurance.housingFundBaseMode" class="full-width">
+              <el-option
+                v-for="option in HOUSING_FUND_BASE_MODE_OPTIONS"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </el-form-item>
 
-      <el-form-item v-if="needHousingManualBase" label="公积金基数">
-        <el-input-number
-          v-model="store.insurance.housingFundManualBase"
-          :min="0"
-          :step="500"
-          :precision="0"
-          controls-position="right"
-          class="full-width"
-        />
-      </el-form-item>
+          <el-form-item v-if="needHousingManualBase" label="公积金基数">
+            <el-input-number
+              v-model="store.insurance.housingFundManualBase"
+              :min="0"
+              :step="500"
+              :precision="0"
+              controls-position="right"
+              class="insurance-editor__money"
+            />
+          </el-form-item>
 
-      <el-form-item label="公积金托底">
-        <el-switch v-model="store.insurance.housingFundClampEnabled" />
-        <span class="inline-tip">
-          公积金基数上下限 {{ formatMoney(housingFundRange.lower) }} ~
-          {{ formatMoney(housingFundRange.upper) }}，缴费额按元取整
-        </span>
-      </el-form-item>
+          <el-form-item label="公积金托底">
+            <el-switch v-model="store.insurance.housingFundClampEnabled" />
+            <span class="inline-tip">
+              公积金基数上下限 {{ formatMoney(housingFundRange.lower) }} ~
+              {{ formatMoney(housingFundRange.upper) }}，缴费额按元取整
+            </span>
+          </el-form-item>
+        </div>
+      </div>
 
       <el-form-item label="大病医疗">
         <el-input-number
@@ -191,9 +198,8 @@ function applyHousingFundPreset(percent: number) {
           :min="0"
           :step="1"
           :precision="0"
-          size="small"
           controls-position="right"
-          class="full-width"
+          class="insurance-editor__money"
         />
         <span class="inline-tip">
           元/月，叠加到个人医疗；默认 0 不计入{{
@@ -317,6 +323,23 @@ function applyHousingFundPreset(percent: number) {
 
 .full-width {
   width: 100%;
+}
+
+.insurance-editor__money {
+  width: 160px;
+}
+
+/* 宽屏时社保基数与公积金配置并排，缩短表单纵向长度 */
+.insurance-form__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 24px;
+}
+
+@media (max-width: 1099px) {
+  .insurance-form__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .inline-tip {

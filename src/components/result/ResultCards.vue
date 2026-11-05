@@ -5,6 +5,7 @@
  * @Description: 年度结果概览：到手主卡 + 收入构成条 + 关键指标网格
  */
 import { computed } from 'vue'
+import { useCountUp } from '@/composables/useCountUp'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { formatMoney, formatPercent } from '@/utils/format'
@@ -14,6 +15,9 @@ const { result } = useSalaryCalculator()
 const settingsStore = useSettingsStore()
 
 const annual = computed(() => result.value.annual)
+
+/** 主卡到手金额：进入结果视图时滚动一次 */
+const animatedNet = useCountUp(computed(() => annual.value.net))
 
 /** 在职月份数，用于月均口径换算；必须按实际区间计算，不能默认算到年末 */
 const monthsWorked = computed(
@@ -104,7 +108,7 @@ const settlementText = computed(() => {
       </div>
 
       <div class="summary-hero__value num">
-        <span class="summary-hero__currency">¥</span>{{ formatMoney(annual.net) }}
+        <span class="summary-hero__currency">¥</span>{{ formatMoney(animatedNet) }}
       </div>
       <p class="summary-hero__sub">
         月均 ¥{{ formatMoney(round2(annual.net / monthsWorked)) }}
@@ -200,7 +204,7 @@ const settlementText = computed(() => {
 }
 
 .summary-hero__eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   color: #7dd3c7;
@@ -208,10 +212,10 @@ const settlementText = computed(() => {
 }
 
 .summary-hero__pill {
-  padding: 3px 9px;
+  padding: 3px 10px;
   border: 1px solid rgb(125 211 199 / 35%);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   color: #9ee3d9;
 }
 
@@ -231,7 +235,7 @@ const settlementText = computed(() => {
 
 .summary-hero__sub {
   margin-top: 5px;
-  font-size: 12px;
+  font-size: 13px;
   color: #9fb0c6;
 }
 
@@ -284,15 +288,15 @@ const settlementText = computed(() => {
 
 .summary-hero__legend li {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
-  font-size: 11px;
+  font-size: 13px;
   color: #c3cfdf;
 }
 
 .summary-hero__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
@@ -302,13 +306,13 @@ const settlementText = computed(() => {
 
 .summary-hero__legend-value {
   color: #eef3f9;
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
 .summary-hero__legend-ratio {
-  width: 38px;
+  width: 42px;
   color: #8496ad;
-  font-size: 10.5px;
+  font-size: 12px;
   text-align: right;
 }
 
@@ -331,12 +335,12 @@ const settlementText = computed(() => {
 }
 
 .stat__label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--app-ink-500);
 }
 
 .stat__value {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 600;
   line-height: 1.25;
   color: var(--app-ink-900);
@@ -344,19 +348,35 @@ const settlementText = computed(() => {
 
 .stat__value--text {
   font-family: var(--app-font-sans);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--app-jade-700);
 }
 
 .stat__sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--app-ink-500);
 }
 
 .stat--settlement {
   border-color: var(--app-jade-100);
   background: linear-gradient(180deg, #f5fbfa, #fff);
+}
+
+/* 指标卡悬停微反馈：轻微上浮 + 玉色描边，减少动效时直接关闭过渡 */
+@media (prefers-reduced-motion: no-preference) {
+  .stat {
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      transform 0.18s ease;
+  }
+
+  .stat:hover {
+    border-color: var(--app-jade-100);
+    box-shadow: 0 10px 24px -14px rgb(15 118 110 / 28%);
+    transform: translateY(-2px);
+  }
 }
 
 /* 侧边栏占用约 250px，1200px 以下先让概览卡纵向排列，避免两栏被压缩 */

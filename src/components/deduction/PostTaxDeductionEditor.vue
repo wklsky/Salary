@@ -72,7 +72,6 @@ function monthAmountOf(item: PostTaxDeductionItem, month: number): number {
           <el-switch v-model="item.enabled" size="small" />
           <el-input
             v-model="item.name"
-            size="small"
             class="posttax-item__name"
             placeholder="扣款名称"
           />
@@ -108,7 +107,6 @@ function monthAmountOf(item: PostTaxDeductionItem, month: number): number {
             <span class="month-cell__label">{{ month }} 月</span>
             <MoneyInput
               :model-value="monthAmountOf(item, month)"
-              size="small"
               @update:model-value="
                 (value: number) => store.setPostTaxMonthlyAmount(item.id, month, value)
               "
@@ -119,7 +117,7 @@ function monthAmountOf(item: PostTaxDeductionItem, month: number): number {
     </ul>
 
     <footer class="posttax-editor__actions">
-      <el-button :icon="Plus" size="small" @click="store.addPostTaxDeduction()">
+      <el-button :icon="Plus" @click="store.addPostTaxDeduction()">
         新增扣款项
       </el-button>
       <span class="posttax-editor__tip">
@@ -217,7 +215,7 @@ function monthAmountOf(item: PostTaxDeductionItem, month: number): number {
 
 .posttax-item__months {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 6px;
 }
 

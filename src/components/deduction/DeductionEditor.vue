@@ -88,8 +88,14 @@ function onToggle(key: DeductionKey, enabled: boolean) {
 <template>
   <section class="deduction-editor">
     <div class="deduction-editor__summary">
-      <span>月度可扣 <strong>¥{{ formatMoney(monthlyTotal) }}</strong></span>
-      <span>年度可扣 <strong>¥{{ formatMoney(annualTotal) }}</strong></span>
+      <div class="summary-cell">
+        <span class="summary-cell__label">月度可扣</span>
+        <strong class="summary-cell__value">¥{{ formatMoney(monthlyTotal) }}</strong>
+      </div>
+      <div class="summary-cell">
+        <span class="summary-cell__label">年度可扣</span>
+        <strong class="summary-cell__value accent">¥{{ formatMoney(annualTotal) }}</strong>
+      </div>
     </div>
 
     <ul class="deduction-list">
@@ -113,7 +119,6 @@ function onToggle(key: DeductionKey, enabled: boolean) {
           <MoneyInput
             :model-value="store.deductions[meta.key]?.amount ?? 0"
             :step="100"
-            size="small"
             class="deduction-item__amount"
             @update:model-value="(value: number) => store.updateDeduction(meta.key, { amount: value })"
           />
@@ -122,7 +127,6 @@ function onToggle(key: DeductionKey, enabled: boolean) {
           <el-select
             v-if="meta.splittable"
             :model-value="store.deductions[meta.key]?.share ?? 1"
-            size="small"
             class="deduction-item__share"
             @update:model-value="(value: number) => store.updateDeduction(meta.key, { share: value })"
           >
@@ -137,7 +141,6 @@ function onToggle(key: DeductionKey, enabled: boolean) {
           <el-select
             v-if="meta.period === 'annual'"
             :model-value="store.deductions[meta.key]?.month ?? 12"
-            size="small"
             class="deduction-item__month"
             @update:model-value="(value: number) => store.updateDeduction(meta.key, { month: value })"
           >
@@ -204,17 +207,32 @@ function onToggle(key: DeductionKey, enabled: boolean) {
 }
 
 .deduction-editor__summary {
-  display: flex;
-  justify-content: space-around;
-  padding: 8px;
-  border-radius: 8px;
-  background: var(--el-fill-color-light);
-  font-size: 13px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 240px));
+  gap: 8px;
 }
 
-.deduction-editor__summary strong {
-  color: var(--el-color-primary);
+.summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+}
+
+.summary-cell__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.summary-cell__value {
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
+}
+
+.summary-cell__value.accent {
+  color: var(--el-color-primary);
 }
 
 .deduction-list {
@@ -247,11 +265,12 @@ function onToggle(key: DeductionKey, enabled: boolean) {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   margin-top: 8px;
 }
 
 .deduction-item__amount {
-  width: 130px;
+  width: 150px;
 }
 
 .deduction-item__share {

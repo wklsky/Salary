@@ -5,7 +5,7 @@
  * @Description: 月度明细视图：结果概览、可自定义表头的明细表与单月数据编辑
  */
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
-import { ArrowLeft, Download, Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, Download, Plus, Setting } from '@element-plus/icons-vue'
 import PagePager from '@/components/common/PagePager.vue'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import BonusAdvice from '@/components/result/BonusAdvice.vue'
@@ -31,12 +31,14 @@ const props = defineProps<Props>()
  * @event config-columns 打开表格列配置
  * @event sections 分区目录变化，同步给侧边栏
  * @event select-section 切换到上一个/下一个明细分页
+ * @event goto-income 年终奖引导空态跳回录入视图的收入项分区
  */
 const emit = defineEmits<{
   back: []
   'config-columns': []
   sections: [items: NavItem[]]
   'select-section': [key: TableSectionKey]
+  'goto-income': []
 }>()
 
 // 图表依赖 ECharts 且非首屏必需，走异步组件避免拖慢首屏渲染
@@ -78,9 +80,11 @@ const hasBonusAdvice = computed(() => Boolean(result.value.bonusComparison))
 const sections = computed<NavItem[]>(() => {
   const items: NavItem[] = [
     { key: 'overview', label: '结果概览', meta: '到手 / 税负' },
-    ...(hasBonusAdvice.value
-      ? [{ key: 'bonus', label: '年终奖建议', meta: '计税口径对比' }]
-      : []),
+    {
+      key: 'bonus',
+      label: '年终奖建议',
+      meta: hasBonusAdvice.value ? '计税口径对比' : '待添加收入项',
+    },
     { key: 'monthly', label: '逐月明细', meta: `${schemaStore.visibleColumns.length} 列` },
     { key: 'annual', label: '年度汇总与图表', meta: '汇总 / 图表' },
   ]
@@ -113,6 +117,15 @@ const pageProgress = computed(() => {
   return `${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
 })
 
+/** 各分区的账本式头部说明 */
+const SECTION_DESCS: Record<TableSectionKey, string> = {
+  overview: '计算后的年度到手、税负与收入构成总览',
+  bonus: '全年一次性奖金在单独计税与并入综合所得两种口径下的税负对比',
+  monthly: '逐月发放与扣缴明细，点击月份可编辑单月数据，表格金额可直接修改',
+  annual: '全年收入、五险一金与个税的年度汇总和可视化图表',
+}
+const currentSectionDesc = computed(() => SECTION_DESCS[props.section])
+
 function goToSection(item: NavItem | undefined) {
   if (!item) return
   emit('select-section', item.key as TableSectionKey)
@@ -122,29 +135,52 @@ function goToSection(item: NavItem | undefined) {
 <template>
   <section class="table-view">
     <header class="table-view__head">
-      <el-button :icon="ArrowLeft" size="small" text @click="emit('back')">返回录入</el-button>
+      <span class="table-view__index">{{ currentSection?.index }}</span>
       <div class="table-view__titles">
-        <span class="table-view__eyebrow">月度明细 · {{ pageProgress }}</span>
-        <h2 class="table-view__title">{{ currentSectionLabel }}</h2>
+        <div class="table-view__title-row">
+          <h2 class="table-view__title">{{ currentSectionLabel }}</h2>
+          <span v-if="currentSection?.meta" class="table-view__meta">
+            {{ currentSection.meta }}
+          </span>
+        </div>
+        <p class="table-view__desc">{{ currentSectionDesc }}</p>
         <p class="table-view__range">
           {{ settingsStore.year }} 年 · {{ settingsStore.rangeText }}
         </p>
       </div>
-      <div v-if="section === 'monthly'" class="table-view__actions">
-        <el-button size="small" :icon="Setting" @click="emit('config-columns')">表格列</el-button>
-        <el-button size="small" type="primary" plain :icon="Download" @click="onExportCsv">
-          导出明细
-        </el-button>
+      <div class="table-view__actions">
+        <el-button :icon="ArrowLeft" size="small" text @click="emit('back')">返回录入</el-button>
+        <template v-if="section === 'monthly'">
+          <el-button size="small" :icon="Setting" @click="emit('config-columns')">表格列</el-button>
+          <el-button size="small" type="primary" plain :icon="Download" @click="onExportCsv">
+            导出明细
+          </el-button>
+        </template>
       </div>
     </header>
 
     <section v-if="section === 'overview'" class="table-view__section">
-      <ResultCards />
+      <div class="table-view__overview">
+        <ResultCards />
+        <!-- 概览页直接挂趋势图，不必再切到年度页签 -->
+        <Suspense>
+          <ChartPanel mode="trend" />
+          <template #fallback>
+            <div class="chart-loading">图表加载中…</div>
+          </template>
+        </Suspense>
+      </div>
     </section>
 
     <section v-if="section === 'bonus'" id="table-section-bonus" class="table-view__section">
       <BonusAdvice v-if="hasBonusAdvice" />
-      <el-empty v-else description="当前没有年终奖收入项，添加后可查看计税口径建议" />
+      <div v-else class="bonus-empty">
+        <el-empty description="当前没有年终奖收入项，添加后可查看计税口径建议">
+          <el-button type="primary" plain :icon="Plus" @click="emit('goto-income')">
+            去添加年终奖
+          </el-button>
+        </el-empty>
+      </div>
     </section>
 
     <section v-if="section === 'monthly'" class="table-view__section">
@@ -208,6 +244,20 @@ function goToSection(item: NavItem | undefined) {
   animation: table-page-in 0.18s ease;
 }
 
+.table-view__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bonus-empty {
+  padding: 24px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-shadow-sm);
+}
+
 @keyframes table-page-in {
   from {
     opacity: 0;
@@ -227,47 +277,80 @@ function goToSection(item: NavItem | undefined) {
 }
 
 .table-view__head {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
-  flex-wrap: wrap;
-  padding: 12px 16px;
+  align-items: start;
+  padding: 16px 20px 14px;
   background: var(--app-surface);
   border: 1px solid var(--app-line);
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   box-shadow: var(--app-shadow-sm);
+}
+
+/* 与 SectionPanel 一致的账本式页眉：大号衬线序号 + 竖线 + 标题说明 + meta 胶囊 */
+.table-view__index {
+  min-width: 36px;
+  padding: 0 2px 0 0;
+  color: var(--app-ink-900);
+  font-family: var(--app-font-ledger);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
 }
 
 .table-view__titles {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--app-line);
 }
 
-.table-view__eyebrow {
-  color: var(--app-jade-700);
-  font-family: var(--app-font-ledger);
-  font-size: 11px;
-  letter-spacing: 0.12em;
+.table-view__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .table-view__title {
-  font-size: 18px;
+  margin: 0;
+  font-size: 16px;
   font-weight: 700;
   color: var(--app-ink-900);
 }
 
-.table-view__range {
+.table-view__meta {
+  padding: 3px 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  color: var(--app-ink-700);
+  background: #f5f8fb;
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.table-view__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--app-ink-500);
+}
+
+.table-view__range {
+  margin: 0;
+  font-size: 12px;
+  color: var(--app-ink-300);
 }
 
 .table-view__actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 2px;
 }
 
 .table-view__card-head {
@@ -296,23 +379,21 @@ function goToSection(item: NavItem | undefined) {
 }
 
 @media (max-width: 640px) {
-  /* 窄屏下标题独占一行，避免被操作按钮挤压成竖排文字 */
+  /* 窄屏下操作区独占一行，标题区保持可读 */
   .table-view__head {
-    gap: 8px 10px;
-    align-items: flex-start;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding: 15px 16px 13px;
   }
 
-  .table-view__titles {
-    order: 3;
-    flex-basis: 100%;
-  }
-
-  .table-view__title {
-    white-space: nowrap;
+  .table-view__index {
+    min-width: 30px;
+    font-size: 24px;
   }
 
   .table-view__actions {
-    margin-left: auto;
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
   }
 }
 </style>

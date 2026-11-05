@@ -48,6 +48,95 @@
   --el-color-primary-light-8: #d0e5e2;
   --el-color-primary-light-9: #e7f2f0;
   --el-color-primary-dark-2: #0b5e57;
+
+  /* 成功色与主色同族：玉石绿就是本应用的"好"色 */
+  --el-color-success: var(--el-color-primary);
+  --el-color-success-light-3: var(--el-color-primary-light-3);
+  --el-color-success-light-5: var(--el-color-primary-light-5);
+  --el-color-success-light-7: var(--el-color-primary-light-7);
+  --el-color-success-light-8: var(--el-color-primary-light-8);
+  --el-color-success-light-9: var(--el-color-primary-light-9);
+  --el-color-success-dark-2: var(--el-color-primary-dark-2);
+
+  /* 警告色用应用琥珀，与税费提示条一致 */
+  --el-color-warning: #b45309;
+  --el-color-warning-light-3: #cb8753;
+  --el-color-warning-light-5: #daa984;
+  --el-color-warning-light-7: #e9cbb5;
+  --el-color-warning-light-8: #f0ddce;
+  --el-color-warning-light-9: #f8eee6;
+  --el-color-warning-dark-2: #904207;
+
+  /* 危险/错误色用应用玫瑰红 */
+  --el-color-danger: #b42318;
+  --el-color-danger-light-3: #cb655d;
+  --el-color-danger-light-5: #da918c;
+  --el-color-danger-light-7: #e9bdba;
+  --el-color-danger-light-8: #f0d3d1;
+  --el-color-danger-light-9: #f8e9e8;
+  --el-color-danger-dark-2: #901c13;
+  --el-color-error: var(--el-color-danger);
+  --el-color-error-light-3: var(--el-color-danger-light-3);
+  --el-color-error-light-5: var(--el-color-danger-light-5);
+  --el-color-error-light-7: var(--el-color-danger-light-7);
+  --el-color-error-light-8: var(--el-color-danger-light-8);
+  --el-color-error-light-9: var(--el-color-danger-light-9);
+  --el-color-error-dark-2: var(--el-color-danger-dark-2);
+
+  /* 信息色用墨蓝灰 */
+  --el-color-info: #64748b;
+  --el-color-info-light-3: #939eae;
+  --el-color-info-light-5: #b2bac5;
+  --el-color-info-light-7: #d0d6df;
+  --el-color-info-light-8: #e0e3e8;
+  --el-color-info-light-9: #f0f1f1;
+  --el-color-info-dark-2: #505d6f;
+
+  /* 文本色接入墨蓝色阶 */
+  --el-text-color-primary: var(--app-ink-900);
+  --el-text-color-regular: var(--app-ink-700);
+  --el-text-color-secondary: var(--app-ink-500);
+  --el-text-color-placeholder: var(--app-ink-300);
+  --el-text-color-disabled: #cad1dc;
+
+  /* 边框与填充统一到应用中性色 */
+  --el-border-color: var(--app-line);
+  --el-border-color-light: #e8edf3;
+  --el-border-color-lighter: #eef2f7;
+  --el-border-color-extra-light: #f4f7fa;
+  --el-border-color-dark: var(--app-line-strong);
+  --el-border-color-darker: #b6c4d4;
+  --el-border-color-hover: var(--app-jade-600);
+  --el-fill-color: #f2f5f9;
+  --el-fill-color-light: #f7f9fc;
+  --el-fill-color-lighter: #fafbfd;
+  --el-fill-color-extra-light: #fcfdfe;
+  --el-fill-color-dark: #e9eef4;
+  --el-fill-color-darker: #e2e8f0;
+  --el-fill-color-blank: #ffffff;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: var(--app-paper);
+  --el-bg-color-overlay: #ffffff;
+
+  /* 禁用态 */
+  --el-disabled-bg-color: #f2f5f9;
+  --el-disabled-text-color: #a9b6c6;
+  --el-disabled-border-color: #dde4ec;
+
+  /* 遮罩与阴影带上墨蓝色调 */
+  --el-mask-color: rgb(22 35 58 / 45%);
+  --el-mask-color-extra-light: rgb(22 35 58 / 20%);
+  --el-box-shadow: 0 12px 32px -12px rgb(22 35 58 / 18%);
+  --el-box-shadow-light: 0 6px 20px -8px rgb(22 35 58 / 12%);
+  --el-box-shadow-lighter: 0 4px 14px -8px rgb(22 35 58 / 10%);
+  --el-box-shadow-dark: 0 18px 48px -20px rgb(22 35 58 / 30%);
+
+  /* 弹层圆角与主题半径对齐 */
+  --el-dialog-border-radius: 12px;
+  --el-popover-border-radius: 10px;
+  --el-message-border-radius: 10px;
+  --el-notification-border-radius: 10px;
+
   --el-border-radius-base: 6px;
   --el-border-radius-small: 4px;
   --el-font-family: var(--app-font-sans);
@@ -141,11 +230,55 @@ strong,
   box-shadow: 0 0 0 1px var(--app-line-strong) inset;
 }
 
+/* 悬停与聚焦时用玉色描边 + 柔和光环，强化可输入区域的辨识度 */
+.el-input__wrapper:hover,
+.el-select .el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--app-jade-600) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select .el-select__wrapper.is-focused {
+  box-shadow:
+    0 0 0 1px var(--app-jade-600) inset,
+    0 0 0 3px rgb(15 118 110 / 13%);
+}
+
+/* 数字输入右对齐，金额按账本习惯靠右对齐更易读 */
+.el-input-number .el-input__inner {
+  text-align: right;
+}
+
 .el-table {
   --el-table-border-color: var(--app-line);
   --el-table-header-bg-color: #f7f9fc;
   --el-table-header-text-color: var(--app-ink-700);
   --el-table-row-hover-bg-color: var(--app-jade-100);
+}
+
+/* 统一细滚动条：轨道透明，悬停时滑块变玉色 */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #c3cfdd;
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--app-jade-600);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c3cfdd transparent;
 }
 
 @media (prefers-reduced-motion: no-preference) {

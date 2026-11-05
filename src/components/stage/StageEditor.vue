@@ -175,7 +175,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
         <div class="stage-item__head">
           <el-select
             :model-value="stage.type"
-            size="small"
             class="stage-item__type"
             @update:model-value="(value: StageType) => onTypeChange(stage, value)"
           >
@@ -199,7 +198,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
         <div class="stage-item__body">
           <el-select
             :model-value="stage.fromMonth"
-            size="small"
             class="stage-item__month"
             @update:model-value="(value: number) => store.updateStage(stage.id, { fromMonth: value })"
           >
@@ -213,7 +211,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
           <span class="stage-item__sep">至</span>
           <el-select
             :model-value="stage.toMonth"
-            size="small"
             class="stage-item__month"
             @update:model-value="(value: number) => store.updateStage(stage.id, { toMonth: value })"
           >
@@ -231,7 +228,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
             collapse-tags-tooltip
             :max-collapse-tags="2"
             :disabled="stage.skipInsurance"
-            size="small"
             class="stage-item__skip"
             placeholder="该阶段单独停缴的险种"
             @update:model-value="
@@ -270,7 +266,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
         v-for="option in STAGE_OPTIONS"
         :key="option.value"
         :icon="Plus"
-        size="small"
         plain
         @click="store.addStage(option.value)"
       >
@@ -331,7 +326,6 @@ function onTypeChange(stage: StageRange, type: StageType) {
               <MoneyInput
                 v-if="row.enabled && !row.variable"
                 :model-value="row.amount"
-                size="small"
                 class="plan-row__amount"
                 @update:model-value="
                   (value: number) => store.updateStageAmount(row.item.id, plan.type, value)
@@ -406,8 +400,16 @@ function onTypeChange(stage: StageRange, type: StageType) {
   flex-wrap: wrap;
 }
 
+/* 宽屏固定列：起月/至/止月/停缴险种/不缴开关各占一列 */
+@media (min-width: 900px) {
+  .stage-item__body {
+    display: grid;
+    grid-template-columns: auto auto auto minmax(200px, 1fr) auto;
+  }
+}
+
 .stage-item__month {
-  width: 86px;
+  width: 96px;
 }
 
 .stage-item__sep {
@@ -503,11 +505,11 @@ function onTypeChange(stage: StageRange, type: StageType) {
 }
 
 .plan-row__amount {
-  width: 140px;
+  width: 160px;
 }
 
 .plan-row__off {
-  width: 140px;
+  width: 160px;
   font-size: 12px;
   color: var(--el-text-color-placeholder);
 }
