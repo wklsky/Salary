@@ -171,6 +171,29 @@ describe('五险一金缴费基数', () => {
     })
     expect(detail[0]?.base).toBe(22000)
   })
+
+  it('一次性奖金按发放月所处阶段计入缴费基数', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [
+        makeIncome({
+          id: 'bonus',
+          amount: 12000,
+          cycle: 'once',
+          month: 12,
+          kind: 'bonus',
+          intoInsuranceBase: true,
+          staged: true,
+          stageAmounts: { intern: 6000, regular: 12000 },
+        }),
+      ],
+      insurance: makeInsurance({ clampEnabled: false }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [makeStage('intern', 1, 6), makeStage('regular', 7, 12)],
+    })
+    // 奖金 12 月发放，应按转正后的 12000 摊薄为每月 1000，而不是按 1 月的实习期金额
+    expect(detail[0]?.base).toBe(1000)
+  })
 })
 
 describe('累计预扣预缴', () => {
@@ -210,6 +233,15 @@ describe('累计预扣预缴', () => {
     )
     expect(result.annual.tax).toBe(0)
     expect(result.monthly.every((item) => item.tax >= 0)).toBe(true)
+  })
+
+  it('年度汇算同样适用每月减免税额', () => {
+    const result = calculateSalary(makeInput({ taxReductionMonthly: 1000 }))
+    // 预扣阶段每月减免已把个税冲减到 0
+    expect(result.annual.tax).toBe(0)
+    // 汇算口径的年应纳税额 9480 也应扣除全年减免 12000，而不是虚报应补税
+    expect(result.annual.settlementTax).toBe(0)
+    expect(result.annual.settlementDiff).toBe(0)
   })
 
   it('免税收入不计入综合所得但仍计入到手', () => {
@@ -813,6 +845,26 @@ describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
     expect(result.monthly[2]?.otherIncome).toBe(8000)
     expect(result.monthly[2]?.tax).toBe(1190)
   })
+
+  it('非居民个人的额外收入只计税一次，不叠加按次预扣税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 10000 }),
+          makeIncome({ id: 'labor', amount: 10000, cycle: 'once', month: 3, kind: 'labor' }),
+        ],
+        taxpayerType: 'nonResident',
+      }),
+    )
+    // 额外收入已并入当月计税，otherTax 不应再单独扣一次
+    expect(result.monthly[2]?.otherTax).toBe(0)
+    expect(result.annual.otherTax).toBe(0)
+    // 11 个月 × 290 + 3 月的 1190
+    expect(result.annual.tax).toBe(4380)
+    // 非居民个人不适用年度汇算
+    expect(result.annual.settlementTax).toBe(0)
+    expect(result.annual.settlementDiff).toBe(0)
+  })
 })
 
 describe('非现金福利与逐月金额', () => {
@@ -956,6 +1008,33 @@ describe('计税口径修正', () => {
     expect(result.monthly[11]?.bonusTax).toBe(0)
     // 综合所得 180000 + 40000 = 220000，应纳税所得额 160000
     expect(result.annual.tax).toBe(18870)
+  })
+
+  it('单月覆盖的奖金金额同时参与应发与单独计税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 5000 }),
+          makeIncome({ id: 'bonus', amount: 40000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+        bonusMode: 'separate',
+        monthOverrides: { 12: { amounts: { bonus: 1000 } } },
+      }),
+    )
+    expect(result.monthly[11]?.gross).toBe(6000)
+    // 1000 × 3%，不能仍按原始 40000 计算
+    expect(result.monthly[11]?.bonusTax).toBe(30)
+    expect(result.monthly[11]?.net).toBe(5970)
+  })
+
+  it('年度扣除落在离职月之后时提前到在职区间内', () => {
+    const deductions = makeDeductions()
+    deductions.personalPension = { enabled: true, amount: 12000, share: 1, month: 12 }
+    const result = calculateSalary(makeInput({ endMonth: 6, deductions }))
+    // 6 月离职，12 月的年度扣除提前到 6 月，不能被静默丢弃
+    expect(result.monthly[5]?.deductionTotal).toBe(12000)
+    const annualDeduction = result.monthly.reduce((acc, month) => acc + month.deductionTotal, 0)
+    expect(annualDeduction).toBe(12000)
   })
 
   it('大病医疗自动适用 15000 元起扣线', () => {

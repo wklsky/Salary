@@ -26,6 +26,8 @@ export interface InsuranceMonthDetail {
   month: number
   /** 当月实际缴费基数 */
   base: number
+  /** 未应用单月核定时的规则基数，用于单月编辑抽屉展示「自动」值 */
+  autoBase?: number
   /** 公积金基数，与社保基数可能不同 */
   housingFundBase: number
   personal: InsuranceAmountMap

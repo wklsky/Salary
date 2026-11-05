@@ -23,6 +23,7 @@ import type {
   MonthOverride,
   StageRange,
   StageType,
+  TaxpayerType,
 } from '@/types'
 
 /** 存档方案：把一次完整录入的入参快照下来，便于多方案对比 */
@@ -32,13 +33,29 @@ export interface SalaryScheme {
   createdAt: number
   year: number
   startMonth: number
+  /** 离职月份；旧存档缺失时按计算到年末处理 */
+  endMonth?: number
   bonusMode: 'separate' | 'merged' | 'auto'
+  /** 纳税人身份；旧存档缺失时按居民个人处理 */
+  taxpayerType?: TaxpayerType
+  /** 每月减免税额；旧存档缺失时视为 0 */
+  taxReductionMonthly?: number
   incomes: IncomeItem[]
   insurance: InsuranceConfig
   deductions: DeductionStateMap
   stages: StageRange[]
   /** 单月数据覆盖；旧存档缺失时视为无覆盖 */
   monthOverrides?: Record<number, MonthOverride>
+}
+
+/** 方案携带的设置项，应用方案时同步回设置 store */
+export interface SalarySchemeSettings {
+  year: number
+  startMonth: number
+  endMonth: number
+  bonusMode: 'separate' | 'merged' | 'auto'
+  taxpayerType: TaxpayerType
+  taxReductionMonthly: number
 }
 
 export function createDefaultInsurance(): InsuranceConfig {
@@ -336,14 +353,17 @@ export const useSalaryStore = defineStore(
       monthOverrides.value = next
     }
 
-    function saveScheme(name: string, meta: { year: number; startMonth: number; bonusMode: 'separate' | 'merged' | 'auto' }) {
+    function saveScheme(name: string, meta: SalarySchemeSettings) {
       const scheme: SalaryScheme = {
         id: createId('scheme'),
         name,
         createdAt: Date.now(),
         year: meta.year,
         startMonth: meta.startMonth,
+        endMonth: meta.endMonth,
         bonusMode: meta.bonusMode,
+        taxpayerType: meta.taxpayerType,
+        taxReductionMonthly: meta.taxReductionMonthly,
         incomes: JSON.parse(JSON.stringify(incomes.value)) as IncomeItem[],
         insurance: JSON.parse(JSON.stringify(insurance.value)) as InsuranceConfig,
         deductions: JSON.parse(JSON.stringify(deductions.value)) as DeductionStateMap,
@@ -357,7 +377,7 @@ export const useSalaryStore = defineStore(
       return scheme
     }
 
-    function applyScheme(id: string): { year: number; startMonth: number; bonusMode: 'separate' | 'merged' | 'auto' } | null {
+    function applyScheme(id: string): SalarySchemeSettings | null {
       const scheme = schemes.value.find((item) => item.id === id)
       if (!scheme) return null
       incomes.value = normalizeIncomes(JSON.parse(JSON.stringify(scheme.incomes)) as IncomeItem[])
@@ -367,7 +387,15 @@ export const useSalaryStore = defineStore(
       monthOverrides.value = (JSON.parse(
         JSON.stringify(scheme.monthOverrides ?? {}),
       ) as Record<number, MonthOverride>) ?? {}
-      return { year: scheme.year, startMonth: scheme.startMonth, bonusMode: scheme.bonusMode }
+      return {
+        year: scheme.year,
+        startMonth: scheme.startMonth,
+        // 旧存档没有离职月时按原先行为计算到年末
+        endMonth: scheme.endMonth ?? 12,
+        bonusMode: scheme.bonusMode,
+        taxpayerType: scheme.taxpayerType ?? 'resident',
+        taxReductionMonthly: scheme.taxReductionMonthly ?? 0,
+      }
     }
 
     function removeScheme(id: string) {

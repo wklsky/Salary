@@ -10,28 +10,34 @@ import { BASIC_DEDUCTION_MONTHLY } from '@/config/policy'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
+import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import { formatMoney, formatPercent } from '@/utils/format'
 import { round2 } from '@/core'
 
 const { result } = useSalaryCalculator()
 const salaryStore = useSalaryStore()
 const settingsStore = useSettingsStore()
+const schemaStore = useTableSchemaStore()
 
-/**
- * 各收入项的年度发放额：直接累加月度明细，天然包含实习期/试用期的阶段差异
- */
-const incomeRows = computed(() => {
-  const annualByItem = result.value.monthly.reduce<Record<string, number>>((acc, month) => {
+/** 月度明细中按项目 key 汇总的年度金额，收入项与自定义列共用 */
+const annualByKey = computed(() =>
+  result.value.monthly.reduce<Record<string, number>>((acc, month) => {
     Object.entries(month.incomeBreakdown).forEach(([id, value]) => {
       acc[id] = round2((acc[id] ?? 0) + value)
     })
     return acc
-  }, {})
+  }, {}),
+)
 
-  return salaryStore.incomes
+/**
+ * 各收入项的年度发放额：直接累加月度明细，天然包含实习期/试用期的阶段差异
+ * 自定义列同样计入应发，补在收入项之后，保证「收入构成」合计与应发一致
+ */
+const incomeRows = computed(() => {
+  const incomes = salaryStore.incomes
     .filter((item) => item.enabled)
     .map((item) => {
-      const annual = annualByItem[item.id] ?? 0
+      const annual = annualByKey.value[item.id] ?? 0
       return {
         name: item.name,
         cycle:
@@ -42,6 +48,20 @@ const incomeRows = computed(() => {
         ratio: round2(annual / (result.value.annual.gross || 1)),
       }
     })
+
+  const customs = schemaStore.customColumnItems
+    .filter((column) => column.intoGross)
+    .map((column) => {
+      const annual = annualByKey.value[column.key] ?? 0
+      return {
+        name: column.label,
+        cycle: '自定义列',
+        annual,
+        ratio: round2(annual / (result.value.annual.gross || 1)),
+      }
+    })
+
+  return [...incomes, ...customs]
 })
 
 const insuranceRows = computed(() =>
@@ -62,7 +82,8 @@ const specialDeductionAnnual = computed(() =>
 
 const deductionRows = computed(() => {
   const annual = result.value.annual
-  const monthsWorked = 12 - settingsStore.startMonth + 1
+  // 按实际在职区间计算，离职月早于年末时不能仍按 12 个月计提减除费用
+  const monthsWorked = Math.max(0, settingsStore.endMonth - settingsStore.startMonth + 1)
   return [
     {
       name: '基本减除费用',

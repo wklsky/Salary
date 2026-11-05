@@ -20,6 +20,22 @@ import type {
 /** 动态收入列的起始排序值，落在静态收入列区间内 */
 const DYNAMIC_COLUMN_ORDER_BASE = 150
 
+/** 表格 Schema 的可序列化快照，随配置一起导出/导入 */
+export interface TableSchemaSnapshot {
+  columns: ColumnSchema[]
+  presets: ColumnPreset[]
+  activePresetId: string
+}
+
+/** 把任意来源的数值数组补齐为 12 个月的合法金额，避免脏存档导致计算 NaN */
+function normalizeValues(values: unknown): number[] {
+  const source = Array.isArray(values) ? values : []
+  return Array.from({ length: 12 }, (_, index) => {
+    const value = Number(source[index])
+    return Number.isFinite(value) ? value : 0
+  })
+}
+
 export const useTableSchemaStore = defineStore(
   'table-schema',
   () => {
@@ -214,6 +230,72 @@ export const useTableSchemaStore = defineStore(
       applyPreset(DEFAULT_PRESET_ID)
     }
 
+    /** 导出纯 JSON 快照，避免把响应式代理写进配置文件 */
+    function exportSchema(): TableSchemaSnapshot {
+      return JSON.parse(
+        JSON.stringify({
+          columns: columns.value,
+          presets: presets.value,
+          activePresetId: activePresetId.value,
+        }),
+      ) as TableSchemaSnapshot
+    }
+
+    /**
+     * 导入表格 Schema
+     * 自定义列带逐月金额且参与计税，属于计算结果的一部分，因此必须随配置一起迁移；
+     * 对旧版本或手工编辑过的文件做字段兜底，避免脏数据打散整张表
+     */
+    function importSchema(payload?: Partial<TableSchemaSnapshot>) {
+      if (Array.isArray(payload?.columns)) {
+        const imported = payload.columns
+          .filter(
+            (column): column is ColumnSchema =>
+              typeof column?.key === 'string' && typeof column?.label === 'string',
+          )
+          .map((column) => {
+            const custom = column.custom
+            return {
+              ...column,
+              group: column.group ?? 'income',
+              visible: column.visible !== false,
+              order: Number.isFinite(column.order) ? column.order : 0,
+              width: Number.isFinite(column.width) ? column.width : 120,
+              formatter: column.formatter ?? 'money',
+              dynamic: column.dynamic === true,
+              custom: custom
+                ? {
+                    values: normalizeValues(custom.values),
+                    intoGross: custom.intoGross !== false,
+                    taxable: custom.taxable !== false,
+                    intoBase: custom.intoBase === true,
+                  }
+                : undefined,
+            }
+          })
+        if (imported.length > 0) columns.value = imported
+      }
+
+      if (Array.isArray(payload?.presets)) {
+        const importedPresets = payload.presets
+          .filter(
+            (preset): preset is ColumnPreset =>
+              typeof preset?.id === 'string' && typeof preset?.name === 'string',
+          )
+          .map((preset) => ({
+            ...preset,
+            builtin: preset.builtin === true,
+            visibleKeys: Array.isArray(preset.visibleKeys) ? preset.visibleKeys : [],
+            includeIncomeColumns: preset.includeIncomeColumns !== false,
+          }))
+        if (importedPresets.length > 0) presets.value = importedPresets
+      }
+
+      if (typeof payload?.activePresetId === 'string') {
+        activePresetId.value = payload.activePresetId
+      }
+    }
+
     return {
       columns,
       presets,
@@ -235,6 +317,8 @@ export const useTableSchemaStore = defineStore(
       savePreset,
       removePreset,
       resetColumns,
+      exportSchema,
+      importSchema,
     }
   },
   { persist: { key: 'salary-calc:table-schema' } },

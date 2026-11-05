@@ -64,10 +64,14 @@ const structureOption = computed(() => {
         radius: ['45%', '70%'],
         avoidLabelOverlap: true,
         label: { formatter: '{b}\n{d}%' },
+        // 非现金福利含在应发中但不计入到手，单列一片才能让饼图合计等于应发
         data: [
           { name: '到手工资', value: annual.net },
           { name: '五险一金(个人)', value: annual.insurancePersonal },
           { name: '个人所得税', value: annual.tax },
+          ...(annual.nonCashIncome > 0
+            ? [{ name: '非现金福利', value: annual.nonCashIncome }]
+            : []),
         ],
       },
     ],

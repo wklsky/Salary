@@ -12,7 +12,7 @@ import type { StageRange, TaxpayerType } from '@/types'
 import { ANNUAL_TAX_BRACKETS, MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { DEDUCTION_CATALOG } from '@/config/specialDeductions'
 import { isOtherIncomeKind, otherIncomeAmount, otherIncomeTax } from './otherIncome'
-import { amountOfMonth, amountOfStage, stageTypeOfMonth } from './stage'
+import { amountOfMonth, stageTypeOfMonth } from './stage'
 import { bonusTaxSeparate, taxByBrackets } from './bonus'
 import { dec, nonNegative, round2, sumMoney } from './money'
 
@@ -180,8 +180,9 @@ function deductionSum(
       const effective = cap > 0 ? Math.min(afterThreshold, cap) : afterThreshold
 
       if (meta.period === 'monthly') return effective
-      // 年度一次性扣除落在入职月之前时顺延至入职月，避免当年扣除被静默吞掉
-      const hitMonth = Math.max(state.month, startMonth)
+      // 年度一次性扣除落在在职区间之外时收敛到区间内：
+      // 早于入职月顺延到入职月，晚于离职月提前到离职月，避免当年扣除被静默吞掉
+      const hitMonth = Math.min(Math.max(state.month, startMonth), endMonth)
       return month === hitMonth ? effective : 0
     }),
   )
@@ -229,6 +230,7 @@ function bonusTaxOfMonth(
   endMonth: number,
   bonusSeparateAmounts: Record<string, number>,
   stages: StageRange[],
+  monthOverrides: Record<number, MonthOverride>,
 ): number {
   if (month < startMonth || month > endMonth) return 0
   const stage = stageTypeOfMonth(stages, month)
@@ -236,7 +238,13 @@ function bonusTaxOfMonth(
     incomes
       .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
       .filter((item) => item.month === month)
-      .map((item) => Math.min(bonusSeparateAmounts[item.id] ?? 0, amountOfStage(item, stage))),
+      .map((item) => {
+        // 单月覆盖同样作用于奖金，保持与应发口径一致
+        const override = monthOverrides[month]?.amounts?.[item.id]
+        const paid =
+          typeof override === 'number' ? override : amountOfMonth(item, month, stage)
+        return Math.min(bonusSeparateAmounts[item.id] ?? 0, paid)
+      }),
   )
   return bonusTaxSeparate(amount)
 }
@@ -361,16 +369,19 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
           ctx.endMonth,
           ctx.bonusSeparateAmounts,
           ctx.stages,
+          ctx.monthOverrides,
         )
       : 0
-    const taxTotal = round2(dec(currentTax).plus(bonusTax).plus(income.otherTax))
+    // 非居民个人的额外收入已并入当月应纳税所得额统一计税，不能再叠加按次预扣税
+    const otherPrepaid = isResident ? income.otherTax : 0
+    const taxTotal = round2(dec(currentTax).plus(bonusTax).plus(otherPrepaid))
     // 到手 = 应发 − 五险一金个人 − 个税（含额外收入预扣）− 非现金福利
     const net = round2(
       dec(income.gross)
         .minus(insurance.personalTotal)
         .minus(currentTax)
         .minus(bonusTax)
-        .minus(income.otherTax)
+        .minus(otherPrepaid)
         .minus(income.nonCash),
     )
 
@@ -382,7 +393,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
     insuranceCompanyAnnual = round2(dec(insuranceCompanyAnnual).plus(insurance.companyTotal))
     taxAnnual = round2(dec(taxAnnual).plus(currentTax))
     bonusTaxAnnual = round2(dec(bonusTaxAnnual).plus(bonusTax))
-    otherTaxAnnual = round2(dec(otherTaxAnnual).plus(income.otherTax))
+    otherTaxAnnual = round2(dec(otherTaxAnnual).plus(otherPrepaid))
     otherIncomeAnnual = round2(dec(otherIncomeAnnual).plus(income.otherIncome))
     netAnnual = round2(dec(netAnnual).plus(net))
     deductionMonthlyAnnual = round2(dec(deductionMonthlyAnnual).plus(deductionTotal))
@@ -406,7 +417,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       cumulativeTaxPaid: cumTaxPaid,
       tax: currentTax,
       bonusTax,
-      otherTax: income.otherTax,
+      otherTax: otherPrepaid,
       otherIncome: income.otherIncome,
       customValues: {},
       taxTotal,
@@ -519,6 +530,8 @@ export function computeSettlement(params: {
   comprehensiveWithheld: number
   /** 额外收入已预扣税额 */
   otherWithheld: number
+  /** 全年减免税额（如残疾、孤老、烈属减征），与预扣阶段口径保持一致 */
+  taxReductionAnnual: number
 }): { settlementTax: number; settlementDiff: number; donationApplied: number } {
   const tentative = nonNegative(
     round2(
@@ -531,7 +544,10 @@ export function computeSettlement(params: {
   )
   const donationApplied = applyDonationLimit(tentative, params.donation)
   const taxable = nonNegative(round2(dec(tentative).minus(donationApplied)))
-  const settlementTax = taxByBrackets(ANNUAL_TAX_BRACKETS, taxable)
+  // 减免税额同样适用于全年汇算口径，否则会虚增应补税额
+  const settlementTax = nonNegative(
+    round2(dec(taxByBrackets(ANNUAL_TAX_BRACKETS, taxable)).minus(params.taxReductionAnnual)),
+  )
   return {
     settlementTax,
     settlementDiff: round2(

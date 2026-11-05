@@ -5,7 +5,7 @@
  * @Description: 应用外壳：视图切换（录入设置 / 月度明细）、方案存档与导入导出
  */
 import { computed, ref, watch } from 'vue'
-import { Download, Refresh, Upload } from '@element-plus/icons-vue'
+import { Delete, Download, MoreFilled, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SetupView from '@/components/layout/SetupView.vue'
 import TableView from '@/components/layout/TableView.vue'
@@ -16,7 +16,7 @@ import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
-import type { BonusMode } from '@/types'
+import type { BonusMode, TaxpayerType } from '@/types'
 
 /** 视图标识：先录入设置，再进入月度明细 */
 type AppView = 'setup' | 'table'
@@ -30,6 +30,7 @@ const { exportJson, readJsonFile } = useExport()
 const view = ref<AppView>('setup')
 const drawerVisible = ref(false)
 const activeSchemeId = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 /**
  * 补全旧版本 localStorage 存档缺失的字段
@@ -59,7 +60,11 @@ async function onExportJson() {
       endMonth: settingsStore.endMonth,
       monthCount: settingsStore.monthCount,
       bonusMode: settingsStore.bonusMode,
+      taxpayerType: settingsStore.taxpayerType,
+      taxReductionMonthly: settingsStore.taxReductionMonthly,
       ...salaryStore.exportSnapshot(),
+      // 自定义列会影响计税与应发，必须与薪资入参一起迁移
+      tableSchema: schemaStore.exportSchema(),
     },
     `薪资配置_${settingsStore.year}.json`,
   )
@@ -73,28 +78,41 @@ async function onImportJson(rawFile: File) {
       endMonth?: number
       monthCount?: number
       bonusMode?: BonusMode
+      taxpayerType?: TaxpayerType
+      taxReductionMonthly?: number
       incomes?: Parameters<typeof salaryStore.importSnapshot>[0]['incomes']
       insurance?: Parameters<typeof salaryStore.importSnapshot>[0]['insurance']
       deductions?: Parameters<typeof salaryStore.importSnapshot>[0]['deductions']
       stages?: Parameters<typeof salaryStore.importSnapshot>[0]['stages']
       monthOverrides?: Parameters<typeof salaryStore.importSnapshot>[0]['monthOverrides']
+      tableSchema?: Parameters<typeof schemaStore.importSchema>[0]
     }>(rawFile)
 
     salaryStore.importSnapshot(payload)
+    schemaStore.importSchema(payload.tableSchema)
     settingsStore.updateSettings({
       year: payload.year,
       startMonth: payload.startMonth,
       endMonth: payload.endMonth,
       monthCount: payload.monthCount,
       bonusMode: payload.bonusMode,
+      taxpayerType: payload.taxpayerType,
+      taxReductionMonthly: payload.taxReductionMonthly,
     })
+    activeSchemeId.value = ''
     ElMessage.success('配置已导入')
   } catch (error) {
     console.error('[salary] 导入配置失败', error)
     ElMessage.error('导入失败，请检查 JSON 文件格式')
   }
-  // 阻止 el-upload 的默认上传行为
-  return false
+}
+
+/** 原生文件选择：下拉菜单里点击「导入配置」再唤起，避免顶栏堆积上传组件 */
+async function onFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) await onImportJson(file)
 }
 
 async function onSaveScheme() {
@@ -106,7 +124,10 @@ async function onSaveScheme() {
     const scheme = salaryStore.saveScheme(value.trim(), {
       year: settingsStore.year,
       startMonth: settingsStore.startMonth,
+      endMonth: settingsStore.endMonth,
       bonusMode: settingsStore.bonusMode,
+      taxpayerType: settingsStore.taxpayerType,
+      taxReductionMonthly: settingsStore.taxReductionMonthly,
     })
     activeSchemeId.value = scheme.id
     ElMessage.success('方案已保存')
@@ -115,20 +136,41 @@ async function onSaveScheme() {
   }
 }
 
-function onApplyScheme() {
-  const meta = salaryStore.applyScheme(activeSchemeId.value)
-  if (!meta) {
+async function onApplyScheme() {
+  if (!activeSchemeId.value) {
     ElMessage.warning('请先选择方案')
     return
   }
-  settingsStore.updateSettings(meta)
-  ElMessage.success('方案已应用')
+  try {
+    await ElMessageBox.confirm('应用方案会覆盖当前录入内容，是否继续？', '应用方案', {
+      type: 'warning',
+      confirmButtonText: '应用方案',
+    })
+    const meta = salaryStore.applyScheme(activeSchemeId.value)
+    if (!meta) {
+      ElMessage.warning('方案不存在或已被删除')
+      return
+    }
+    settingsStore.updateSettings(meta)
+    ElMessage.success('方案已应用')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') console.error('[salary] 应用方案失败', error)
+  }
 }
 
-function onRemoveScheme() {
+async function onRemoveScheme() {
   if (!activeSchemeId.value) return
-  salaryStore.removeScheme(activeSchemeId.value)
-  activeSchemeId.value = ''
+  try {
+    await ElMessageBox.confirm('删除后无法恢复，是否继续？', '删除方案', {
+      type: 'warning',
+      confirmButtonText: '删除',
+    })
+    salaryStore.removeScheme(activeSchemeId.value)
+    activeSchemeId.value = ''
+    ElMessage.success('方案已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') console.error('[salary] 删除方案失败', error)
+  }
 }
 
 async function onReset() {
@@ -145,29 +187,73 @@ async function onReset() {
     if (error !== 'cancel') console.error('[salary] 重置失败', error)
   }
 }
+
+function onCommand(command: string) {
+  if (command === 'import') {
+    fileInput.value?.click()
+    return
+  }
+  if (command === 'export') {
+    onExportJson()
+    return
+  }
+  if (command === 'remove-scheme') {
+    onRemoveScheme()
+    return
+  }
+  if (command === 'reset') onReset()
+}
 </script>
 
 <template>
   <div class="app">
     <header class="app__header">
       <div class="app__brand">
-        <h1 class="app__title">薪资计算器</h1>
-        <el-tag size="small" effect="plain">政策版本 {{ POLICY_VERSION }}</el-tag>
+        <span class="app__mark" aria-hidden="true">薪</span>
+        <div class="app__identity">
+          <h1 class="app__title">薪资计算器</h1>
+          <span class="app__subtitle">税前税后 · 五险一金 · 年度汇算</span>
+        </div>
+        <el-tooltip
+          :content="`年终奖单独计税有效期至 ${BONUS_SEPARATE_VALID_UNTIL}`"
+          placement="bottom"
+        >
+          <el-tag size="small" effect="plain" class="app__policy">
+            政策版本 {{ POLICY_VERSION }}
+          </el-tag>
+        </el-tooltip>
       </div>
 
-      <el-radio-group v-model="view" size="small" class="app__switch">
-        <el-radio-button value="setup">录入设置</el-radio-button>
-        <el-radio-button value="table">月度明细</el-radio-button>
-      </el-radio-group>
+      <nav class="app__nav" aria-label="视图切换">
+        <button
+          type="button"
+          class="app__nav-item"
+          :class="{ 'is-active': view === 'setup' }"
+          :aria-current="view === 'setup' ? 'page' : undefined"
+          @click="view = 'setup'"
+        >
+          <span class="app__nav-index">1</span>
+          <span>录入设置</span>
+        </button>
+        <span class="app__nav-link" aria-hidden="true"></span>
+        <button
+          type="button"
+          class="app__nav-item"
+          :class="{ 'is-active': view === 'table' }"
+          :aria-current="view === 'table' ? 'page' : undefined"
+          @click="view = 'table'"
+        >
+          <span class="app__nav-index">2</span>
+          <span>月度明细</span>
+        </button>
+      </nav>
 
       <div class="app__actions">
-        <span class="app__net">年度到手 ¥{{ annualNet.toLocaleString('zh-CN') }}</span>
-        <el-select
-          v-model="activeSchemeId"
-          size="small"
-          placeholder="方案存档"
-          class="scheme-select"
-        >
+        <div class="app__net">
+          <span class="app__net-label">年度到手</span>
+          <strong class="app__net-value num">¥{{ annualNet.toLocaleString('zh-CN') }}</strong>
+        </div>
+        <el-select v-model="activeSchemeId" size="small" placeholder="方案存档" class="scheme-select">
           <el-option
             v-for="scheme in salaryStore.schemes"
             :key="scheme.id"
@@ -175,20 +261,36 @@ async function onReset() {
             :value="scheme.id"
           />
         </el-select>
+        <el-button size="small" @click="onSaveScheme">存为方案</el-button>
         <el-button size="small" :disabled="!activeSchemeId" @click="onApplyScheme">应用</el-button>
-        <el-button size="small" @click="onSaveScheme">保存当前</el-button>
-        <el-button size="small" plain :disabled="!activeSchemeId" @click="onRemoveScheme">
-          删除
-        </el-button>
-        <el-divider direction="vertical" />
-        <el-upload :show-file-list="false" accept=".json" :before-upload="onImportJson">
-          <el-button size="small" :icon="Upload">导入</el-button>
-        </el-upload>
-        <el-button size="small" :icon="Download" @click="onExportJson">导出配置</el-button>
-        <el-button size="small" :icon="Refresh" @click="onReset">重置</el-button>
+        <el-dropdown trigger="click" @command="onCommand">
+          <el-button size="small" :icon="MoreFilled" text>更多</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="export" :icon="Download">导出配置</el-dropdown-item>
+              <el-dropdown-item command="import" :icon="Upload">导入配置</el-dropdown-item>
+              <el-dropdown-item
+                command="remove-scheme"
+                :icon="Delete"
+                :disabled="!activeSchemeId"
+              >
+                删除当前方案
+              </el-dropdown-item>
+              <el-dropdown-item command="reset" :icon="Refresh" divided>
+                重置数据
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
 
-      <p class="app__policy-tip">年终奖单独计税有效期至 {{ BONUS_SEPARATE_VALID_UNTIL }}</p>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".json,application/json"
+        hidden
+        @change="onFileChange"
+      />
     </header>
 
     <main class="app__body">
@@ -196,65 +298,208 @@ async function onReset() {
       <TableView v-else @back="view = 'setup'" @config-columns="drawerVisible = true" />
     </main>
 
+    <footer class="app__footer">
+      <span>数据仅保存在本机浏览器，不上传服务器</span>
+      <span>年终奖单独计税有效期至 {{ BONUS_SEPARATE_VALID_UNTIL }}</span>
+    </footer>
+
     <ColumnConfigDrawer v-model="drawerVisible" />
   </div>
 </template>
 
 <style scoped>
 .app {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  background: var(--el-bg-color-page);
 }
 
 .app__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 20px;
-  background: var(--el-bg-color);
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  gap: 18px;
+  padding: 10px clamp(16px, 3vw, 28px);
+  background: rgb(255 255 255 / 88%);
+  border-bottom: 1px solid var(--app-line);
+  backdrop-filter: blur(12px);
   flex-wrap: wrap;
 }
 
 .app__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app__mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--app-jade-600), var(--app-jade-700));
+  box-shadow: 0 10px 20px -12px rgb(15 118 110 / 90%);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.app__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .app__title {
-  margin: 0;
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--app-ink-900);
+}
+
+.app__subtitle {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--app-ink-500);
+}
+
+.app__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.app__nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-ink-500);
+  font: inherit;
+  font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.app__nav-item:hover {
+  color: var(--app-ink-900);
+  background: #f3f6fa;
+}
+
+.app__nav-item.is-active {
+  color: #fff;
+  background: var(--app-ink-900);
+}
+
+.app__nav-index {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--app-jade-100);
+  color: var(--app-jade-700);
+  font-family: var(--app-font-num);
+  font-size: 11px;
+}
+
+.app__nav-item.is-active .app__nav-index {
+  color: #fff;
+  background: rgb(255 255 255 / 18%);
+}
+
+.app__nav-link {
+  width: 16px;
+  height: 1px;
+  background: var(--app-line-strong);
 }
 
 .app__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .app__net {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-color-primary);
-  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-right: 2px;
+  padding-right: 12px;
+  border-right: 1px solid var(--app-line);
 }
 
-.app__policy-tip {
-  width: 100%;
-  margin: 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+.app__net-label {
+  font-size: 11px;
+  color: var(--app-ink-500);
+}
+
+.app__net-value {
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--app-jade-700);
 }
 
 .scheme-select {
-  width: 140px;
+  width: 148px;
 }
 
 .app__body {
-  padding: 16px 20px 32px;
+  flex: 1;
+  padding: 16px clamp(16px, 3vw, 28px) 8px;
+}
+
+.app__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 20px;
+  padding: 22px 20px 28px;
+  font-size: 11px;
+  color: var(--app-ink-300);
+}
+
+@media (max-width: 860px) {
+  .app__header {
+    position: static;
+    gap: 10px;
+    padding: 8px 14px;
+  }
+
+  .app__subtitle,
+  .app__policy {
+    display: none;
+  }
+
+  .app__nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .app__actions {
+    margin-left: auto;
+  }
+
+  .app__net {
+    display: none;
+  }
 }
 </style>

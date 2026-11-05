@@ -44,11 +44,17 @@ export function resolveBaseIncome(
   incomes: IncomeItem[],
   stage: StageType = FALLBACK_STAGE,
   month = 1,
+  stages?: StageRange[],
 ): { monthly: number; onceMonthly: number } {
   const enabled = incomes.filter((item) => item.enabled)
   // 逐月项按当月金额取值，一次性项按其发放月份取值后摊薄
-  const amountOf = (item: IncomeItem) =>
-    amountOfMonth(item, item.cycle === 'monthly' ? month : item.month, stage)
+  // 一次性项所处阶段必须按「发放月」定位，否则在实习期等早期月份会把奖金误算成低阶段金额
+  const amountOf = (item: IncomeItem) => {
+    const targetMonth = item.cycle === 'monthly' ? month : item.month
+    const targetStage =
+      item.cycle === 'monthly' || !stages ? stage : stageTypeOfMonth(stages, targetMonth)
+    return amountOfMonth(item, targetMonth, targetStage)
+  }
   const monthly = sumMoney(
     enabled
       .filter((item) => item.cycle === 'monthly' && item.intoInsuranceBase)
@@ -107,6 +113,7 @@ function buildEmptyDetail(month: number): InsuranceMonthDetail {
   return {
     month,
     base: 0,
+    autoBase: 0,
     housingFundBase: 0,
     personal: emptyAmountMap(),
     company: emptyAmountMap(),
@@ -150,13 +157,12 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
 
     // 基数按当月所处阶段与当月金额解析，使试用期与转正后可以采用不同的缴费基数
     const stage = stageTypeOfMonth(params.stages, month)
-    const baseIncome = resolveBaseIncome(params.incomes, stage, month)
+    const baseIncome = resolveBaseIncome(params.incomes, stage, month, params.stages)
+    // 规则口径的原始基数，供单月编辑抽屉展示「自动」值
+    const autoRawBase = resolveRawBase(params.insurance, city, baseIncome)
     // 单月核定的基数优先，仍受上下限约束，避免填出低于下限的基数
     const overrideBase = params.monthOverrides?.[month]?.insuranceBase
-    const rawBase =
-      typeof overrideBase === 'number'
-        ? overrideBase
-        : resolveRawBase(params.insurance, city, baseIncome)
+    const rawBase = typeof overrideBase === 'number' ? overrideBase : autoRawBase
     const housingRawBase = resolveHousingFundRawBase(
       params.insurance,
       city,
@@ -167,6 +173,9 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     const base = params.insurance.clampEnabled
       ? clampNumber(rawBase, socialRange.lower, socialRange.upper)
       : rawBase
+    const autoBase = params.insurance.clampEnabled
+      ? clampNumber(autoRawBase, socialRange.lower, socialRange.upper)
+      : autoRawBase
     const housingFundBase = params.insurance.housingFundClampEnabled
       ? clampNumber(housingRawBase, housingRange.lower, housingRange.upper)
       : housingRawBase
@@ -199,6 +208,7 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     result.push({
       month,
       base,
+      autoBase,
       housingFundBase,
       personal,
       company,

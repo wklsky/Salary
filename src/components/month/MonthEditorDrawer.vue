@@ -99,7 +99,8 @@ function onCustomValueChange(key: string, value: number) {
 }
 
 const insuranceBase = computed(() => ({
-  auto: insurance.value?.base ?? 0,
+  // autoBase 是未应用单月核定值时的规则基数，避免覆盖后「自动」显示成覆盖值
+  auto: insurance.value?.autoBase ?? insurance.value?.base ?? 0,
   value: override.value?.insuranceBase,
 }))
 
@@ -114,8 +115,18 @@ const summary = computed(() => {
     { label: '应发合计', value: item.gross },
     { label: '五险一金（个人）', value: item.insurancePersonal },
     { label: '个人所得税', value: item.taxTotal },
-    { label: '到手', value: item.net, accent: true },
+    { label: '本月到手', value: item.net, accent: true },
   ]
+})
+
+/** 本月被单独改写的项数，帮助用户快速判断是否还有需要还原的调整 */
+const adjustmentCount = computed(() => {
+  const current = override.value
+  if (!current) return 0
+  return (
+    Object.keys(current.amounts ?? {}).length +
+    (typeof current.insuranceBase === 'number' ? 1 : 0)
+  )
 })
 
 function onResetMonth() {
@@ -128,6 +139,9 @@ function onResetMonth() {
     <div class="month-editor">
       <header class="month-editor__head">
         <el-tag size="small" effect="plain">{{ STAGE_LABELS[stage] }}</el-tag>
+        <el-tag v-if="adjustmentCount > 0" size="small" type="warning" effect="plain">
+          {{ adjustmentCount }} 项已单独调整
+        </el-tag>
         <span class="month-editor__hint">
           修改后自动重算该月工资，未修改的项按收入项自身的阶段/逐月口径取值
         </span>
@@ -275,46 +289,61 @@ function onResetMonth() {
 
 .month-editor__summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 .summary-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--el-fill-color-light);
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 10px;
+  background: #f7f9fc;
 }
 
 .summary-cell--accent {
-  background: var(--el-color-primary-light-9);
+  border-color: var(--app-jade-100);
+  background: linear-gradient(160deg, var(--app-jade-100), #fff);
 }
 
 .summary-cell__label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: 11.5px;
+  color: var(--app-ink-500);
 }
 
 .summary-cell__value {
-  font-size: 15px;
+  font-family: var(--app-font-num);
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
+  color: var(--app-ink-900);
+}
+
+.summary-cell--accent .summary-cell__value {
+  color: var(--app-jade-700);
 }
 
 .month-editor__block {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid var(--app-line);
+  border-radius: 12px;
+  background: var(--app-surface);
 }
 
 .block-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
   margin: 0;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--app-line);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--app-ink-900);
 }
 
 .item-list {

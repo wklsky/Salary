@@ -6,6 +6,7 @@
  */
 import { computed, ref } from 'vue'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
+import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import { formatColumnValue, resolveColumnValue } from '@/utils/columnValue'
 import { formatMoney } from '@/utils/format'
@@ -18,6 +19,18 @@ type Row = MonthlyResult & { isTotal?: boolean }
 
 const { result } = useSalaryCalculator()
 const schemaStore = useTableSchemaStore()
+const salaryStore = useSalaryStore()
+
+/** 该月是否存在单月调整，用于在月份列加标记 */
+function hasAdjustment(month: number): boolean {
+  const override = salaryStore.monthOverrides[month]
+  if (!override) return false
+  return (
+    Object.keys(override.amounts ?? {}).length > 0 ||
+    typeof override.insuranceBase === 'number' ||
+    Boolean(override.note)
+  )
+}
 
 /**
  * 对外事件
@@ -76,7 +89,10 @@ const TOTAL_PLACEHOLDER_KEYS = new Set([
 
 function cellText(row: Row, column: ColumnSchema): string {
   if (!row.isTotal) {
-    return formatColumnValue(column, row, insuranceOf(row.month))
+    const text = formatColumnValue(column, row, insuranceOf(row.month))
+    // 月份列带「·」表示该月存在单独调整，点击行可查看或还原
+    if (column.key === 'month' && hasAdjustment(row.month)) return `${text} ·`
+    return text
   }
 
   if (column.key === 'month') return '合计'
@@ -106,7 +122,7 @@ function onRowClick(row: Row) {
   <div class="monthly-table">
     <div class="monthly-table__toolbar">
       <span class="monthly-table__count">
-        已展示 {{ columns.length }} 列，点击任意月份可单独调整该月数据
+        已展示 {{ columns.length }} 列，点击任意月份可单独调整该月数据；月份后带「·」表示该月已调整
       </span>
       <el-checkbox v-model="stripe" size="small">斑马纹</el-checkbox>
     </div>

@@ -4,11 +4,18 @@
  * @Description: 全局计算设置：年度、在职区间、纳税人身份、减免税额与年终奖计税方式
  */
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { BonusMode, TaxpayerType } from '@/types'
 
 /** 一年最多 12 个月，计算区间不得跨自然年 */
 const MAX_MONTH = 12
+const MIN_MONTH = 1
+
+/** 把月份收敛到 1-12 的整数，避免存档脏数据产生非法区间 */
+function clampMonth(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(MAX_MONTH, Math.max(MIN_MONTH, Math.round(value)))
+}
 
 interface SettingsPayload {
   year: number
@@ -34,13 +41,25 @@ export const useSettingsStore = defineStore(
      * 以 endMonth 为存储源，读写时与起始月联动，避免两处状态不一致
      */
     const monthCount = computed({
-      get: () => endMonth.value - startMonth.value + 1,
+      // 兜底钳制到 1，防止异常状态下界面出现负数月数
+      get: () => Math.max(1, endMonth.value - startMonth.value + 1),
       set: (value: number) => {
         const safe = Math.round(value) || 1
         // 区间不得跨年：起始月 + 月数 − 1 最多到 12 月
         const count = Math.min(Math.max(safe, 1), MAX_MONTH - startMonth.value + 1)
         endMonth.value = startMonth.value + count - 1
       },
+    })
+
+    /**
+     * 起始月后移时保持区间合法
+     * 界面直接绑定 startMonth，若不联动，可能出现离职月早于入职月的空区间，
+     * 计算结果会静默变成全 0
+     */
+    watch(startMonth, (value) => {
+      const safeStart = clampMonth(value, MIN_MONTH)
+      if (safeStart !== value) startMonth.value = safeStart
+      if (endMonth.value < safeStart) endMonth.value = safeStart
     })
 
     /** 当前起始月下允许的最大计算月数 */
@@ -60,8 +79,12 @@ export const useSettingsStore = defineStore(
 
     function updateSettings(payload: Partial<SettingsPayload>) {
       if (payload.year !== undefined) year.value = payload.year
-      if (payload.startMonth !== undefined) startMonth.value = payload.startMonth
-      if (payload.endMonth !== undefined) endMonth.value = payload.endMonth
+      if (payload.startMonth !== undefined) {
+        startMonth.value = clampMonth(payload.startMonth, MIN_MONTH)
+      }
+      if (payload.endMonth !== undefined) {
+        endMonth.value = clampMonth(payload.endMonth, MAX_MONTH)
+      }
       if (payload.monthCount !== undefined) monthCount.value = payload.monthCount
       if (payload.bonusMode !== undefined) bonusMode.value = payload.bonusMode
       if (payload.taxpayerType !== undefined) taxpayerType.value = payload.taxpayerType
@@ -76,10 +99,12 @@ export const useSettingsStore = defineStore(
 
     /** 补齐旧版本存档缺失的设置项，避免读取 undefined 参与计算 */
     function normalize() {
-      if (typeof endMonth.value !== 'number') endMonth.value = 12
+      startMonth.value = clampMonth(startMonth.value, MIN_MONTH)
+      if (typeof endMonth.value !== 'number') endMonth.value = MAX_MONTH
+      endMonth.value = clampMonth(endMonth.value, MAX_MONTH)
+      if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
       if (!taxpayerType.value) taxpayerType.value = 'resident'
       if (typeof taxReductionMonthly.value !== 'number') taxReductionMonthly.value = 0
-      if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
     }
 
     return {

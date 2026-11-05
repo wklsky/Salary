@@ -71,13 +71,28 @@ function buildCustomIncomeItems(
     }))
 }
 
+/** 一次性收入在发放月的实际金额：单月覆盖优先，其次按发放月所处阶段取值 */
+function paidAmountOfItem(
+  item: IncomeItem,
+  stages: SalaryInput['stages'],
+  monthOverrides: Record<number, MonthOverride>,
+): number {
+  const override = monthOverrides[item.month]?.amounts?.[item.id]
+  if (typeof override === 'number') return override
+  return amountOfMonth(item, item.month, stageTypeOfMonth(stages, item.month))
+}
+
 /** 收集当年一次性奖金，金额按发放当月所处阶段取值，按金额从大到小排序 */
-function collectBonusItems(incomes: IncomeItem[], stages: SalaryInput['stages']): BonusItem[] {
+function collectBonusItems(
+  incomes: IncomeItem[],
+  stages: SalaryInput['stages'],
+  monthOverrides: Record<number, MonthOverride>,
+): BonusItem[] {
   return incomes
     .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
     .map((item) => ({
       id: item.id,
-      amount: amountOfMonth(item, item.month, stageTypeOfMonth(stages, item.month)),
+      amount: paidAmountOfItem(item, stages, monthOverrides),
     }))
     .filter((item) => item.amount > 0)
     .sort((a, b) => b.amount - a.amount)
@@ -150,12 +165,14 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
   const bonusAmount = sumMoney(
     incomes
       .filter((item) => item.enabled && item.kind === 'bonus')
-      .map((item) => amountOfMonth(item, item.month, stageTypeOfMonth(input.stages, item.month))),
+      .map((item) => paidAmountOfItem(item, input.stages, monthOverrides)),
   )
 
   const isResident = input.taxpayerType !== 'nonResident'
   // 一个纳税年度内只允许一笔奖金享受单独计税，取金额最大的那笔
-  const topBonus = isResident ? collectBonusItems(incomes, input.stages)[0] : undefined
+  const topBonus = isResident
+    ? collectBonusItems(incomes, input.stages, monthOverrides)[0]
+    : undefined
 
   const merged = runEngine(input, insuranceMonthly, {})
   const separate = runEngine(
@@ -204,17 +221,21 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
   }
 
   const monthsWorked = Math.max(0, input.endMonth - input.startMonth + 1)
-  const settlement = computeSettlement({
-    comprehensiveIncome: chosen.comprehensiveIncome,
-    // 劳务报酬等额外收入与工资薪金合并后适用年度税率表
-    otherIncome: chosen.otherIncomeAnnual,
-    insurancePersonal: chosen.insurancePersonal,
-    deductionAll: chosen.deductionAnnualAll,
-    donation: chosen.donationDeclaredAnnual,
-    monthsWorked,
-    comprehensiveWithheld: chosen.comprehensiveWithheld,
-    otherWithheld: chosen.otherTaxAnnual,
-  })
+  // 非居民个人按月分项计税，不适用居民个人的年度汇算，避免展示无意义的补退税
+  const settlement = isResident
+    ? computeSettlement({
+        comprehensiveIncome: chosen.comprehensiveIncome,
+        // 劳务报酬等额外收入与工资薪金合并后适用年度税率表
+        otherIncome: chosen.otherIncomeAnnual,
+        insurancePersonal: chosen.insurancePersonal,
+        deductionAll: chosen.deductionAnnualAll,
+        donation: chosen.donationDeclaredAnnual,
+        monthsWorked,
+        comprehensiveWithheld: chosen.comprehensiveWithheld,
+        otherWithheld: chosen.otherTaxAnnual,
+        taxReductionAnnual: round2(dec(input.taxReductionMonthly).mul(monthsWorked)),
+      })
+    : { settlementTax: 0, settlementDiff: 0, donationApplied: 0 }
 
   const annual: AnnualSummary = {
     gross: chosen.gross,

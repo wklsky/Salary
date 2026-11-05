@@ -1,10 +1,53 @@
 /**
  * @Author: wj
  * @FilePath: src/styles/global.css
- * @Description: 全局基础样式与排版变量
+ * @Description: 全局基础样式、设计变量与 Element Plus 主题覆写
  */
 :root {
   color-scheme: light;
+
+  /* 应用色板：深墨蓝用于文字与结果主卡，玉石绿用于强调，琥珀色用于税费提示 */
+  --app-ink-900: #16233a;
+  --app-ink-700: #3a4a61;
+  --app-ink-500: #64748b;
+  --app-ink-300: #94a3b8;
+  --app-paper: #edf1f5;
+  --app-surface: #ffffff;
+  --app-line: #dfe6ee;
+  --app-line-strong: #c9d4e0;
+  --app-jade-700: #0b5e57;
+  --app-jade-600: #0f766e;
+  --app-jade-100: #e7f2f0;
+  --app-amber-700: #9a4f0b;
+  --app-amber-600: #b45309;
+  --app-amber-100: #fdf3e3;
+  --app-rose-600: #b42318;
+  --app-rose-100: #fdecea;
+
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-radius-lg: 18px;
+  --app-shadow-sm: 0 1px 2px rgb(22 35 58 / 5%);
+  --app-shadow-md: 0 14px 40px -24px rgb(22 35 58 / 35%);
+
+  /* 数字使用等宽/工程字体，金额列不会因字宽跳动 */
+  --app-font-sans:
+    'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --app-font-num:
+    'Bahnschrift', 'DIN Alternate', 'SF Mono', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Element Plus 主色改用玉石绿，和默认蓝色区分开 */
+  --el-color-primary: #0f766e;
+  --el-color-primary-light-3: #4f9a93;
+  --el-color-primary-light-5: #87bcb6;
+  --el-color-primary-light-7: #b9d8d4;
+  --el-color-primary-light-8: #d0e5e2;
+  --el-color-primary-light-9: #e7f2f0;
+  --el-color-primary-dark-2: #0b5e57;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-font-family: var(--app-font-sans);
 }
 
 * {
@@ -20,25 +63,88 @@ body,
 }
 
 body {
-  font-family:
-    'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, 'Noto Sans SC',
-    sans-serif;
+  font-family: var(--app-font-sans);
   font-size: 14px;
-  color: #1f2329;
-  background: #f5f7fa;
+  line-height: 1.55;
+  color: var(--app-ink-900);
+  background:
+    radial-gradient(circle at 12% -10%, rgb(15 118 110 / 8%), transparent 32%),
+    var(--app-paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  color: #fff;
+  background: var(--app-jade-600);
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--app-jade-600);
+  outline-offset: 2px;
 }
 
 /* 金额类文本统一等宽数字，避免表格中数字跳动 */
 .el-table,
 .el-input-number,
-strong {
+.el-statistic,
+strong,
+.num {
   font-variant-numeric: tabular-nums;
 }
 
+.num {
+  font-family: var(--app-font-num);
+  letter-spacing: -0.01em;
+}
+
 .el-card {
-  border-radius: 10px;
+  border-color: var(--app-line);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.el-card__header {
+  border-bottom-color: var(--app-line);
 }
 
 .el-tabs__content {
-  padding-top: 4px;
+  padding-top: 8px;
+}
+
+.el-alert {
+  border-radius: var(--app-radius-sm);
+}
+
+.el-tag {
+  border-radius: 6px;
+}
+
+.el-button {
+  font-weight: 500;
+}
+
+.el-input-number .el-input__wrapper,
+.el-select .el-select__wrapper {
+  box-shadow: 0 0 0 1px var(--app-line-strong) inset;
+}
+
+.el-table {
+  --el-table-border-color: var(--app-line);
+  --el-table-header-bg-color: #f7f9fc;
+  --el-table-header-text-color: var(--app-ink-700);
+  --el-table-row-hover-bg-color: var(--app-jade-100);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }

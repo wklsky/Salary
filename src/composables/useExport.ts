@@ -45,9 +45,11 @@ export function useExport() {
       return columns
         .map((column) => {
           const value = resolveColumnValue(column, row, insurance)
-          // 金额列保留两位小数，月份列直接输出数字，避免 Excel 识别为文本
           if (typeof value === 'number') {
-            return column.formatter === 'percent' ? (value * 100).toFixed(2) : value.toFixed(2)
+            // 百分比列换算成百分数，月份列输出整数，其余金额保留两位小数
+            if (column.formatter === 'percent') return (value * 100).toFixed(2)
+            if (column.formatter === 'month') return String(value)
+            return value.toFixed(2)
           }
           return escapeCsv(value)
         })

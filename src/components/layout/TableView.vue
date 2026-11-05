@@ -64,9 +64,12 @@ function onExportCsv() {
 <template>
   <section class="table-view">
     <header class="table-view__head">
-      <el-button :icon="ArrowLeft" size="small" @click="emit('back')">返回录入</el-button>
-      <div class="table-view__meta">
-        <span class="table-view__range">{{ settingsStore.year }} 年 {{ settingsStore.rangeText }}</span>
+      <el-button :icon="ArrowLeft" size="small" text @click="emit('back')">返回录入</el-button>
+      <div class="table-view__titles">
+        <h2 class="table-view__title">月度明细</h2>
+        <p class="table-view__range">
+          {{ settingsStore.year }} 年 · {{ settingsStore.rangeText }}
+        </p>
       </div>
       <div class="table-view__actions">
         <el-button size="small" :icon="Setting" @click="emit('config-columns')">表格列</el-button>
@@ -79,7 +82,13 @@ function onExportCsv() {
     <ResultCards />
     <BonusAdvice />
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-view__card">
+      <template #header>
+        <div class="table-view__card-head">
+          <span class="table-view__card-title">逐月发放与扣缴</span>
+          <span class="table-view__card-hint">点击任意月份，可单独调整该月的收入项与缴费基数</span>
+        </div>
+      </template>
       <MonthlyTable @row-click="onRowClick" />
     </el-card>
 
@@ -108,33 +117,65 @@ function onExportCsv() {
 .table-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 
 .table-view__head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  box-shadow: var(--app-shadow-sm);
 }
 
-.table-view__meta {
+.table-view__titles {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.table-view__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--app-ink-900);
 }
 
 .table-view__range {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
+  font-size: 12px;
+  color: var(--app-ink-500);
 }
 
 .table-view__actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.table-view__card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.table-view__card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--app-ink-900);
+}
+
+.table-view__card-hint {
+  font-size: 12px;
+  color: var(--app-ink-500);
 }
 
 .chart-loading {

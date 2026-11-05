@@ -117,33 +117,10 @@ const annualTotal = computed(() => result.value.annual.gross)
         <div class="income-item__head">
           <el-switch v-model="item.enabled" size="small" />
           <el-input v-model="item.name" size="small" class="income-item__name" placeholder="项目名称" />
-          <el-button
-            :icon="ArrowUp"
-            size="small"
-            text
-            :disabled="index === 0"
-            @click="store.moveIncome(item.id, -1)"
-          />
-          <el-button
-            :icon="ArrowDown"
-            size="small"
-            text
-            :disabled="index === store.incomes.length - 1"
-            @click="store.moveIncome(item.id, 1)"
-          />
-          <el-button
-            :icon="Delete"
-            size="small"
-            text
-            type="danger"
-            @click="store.removeIncome(item.id)"
-          />
-        </div>
-
-        <div class="income-item__body">
           <MoneyInput
             :model-value="item.amount"
             size="small"
+            class="income-item__amount"
             @update:model-value="(value) => store.updateIncome(item.id, { amount: value })"
           />
           <el-select
@@ -171,6 +148,29 @@ const annualTotal = computed(() => result.value.annual.gross)
               :value="option.value"
             />
           </el-select>
+          <div class="income-item__ops">
+            <el-button
+              :icon="ArrowUp"
+              size="small"
+              text
+              :disabled="index === 0"
+              @click="store.moveIncome(item.id, -1)"
+            />
+            <el-button
+              :icon="ArrowDown"
+              size="small"
+              text
+              :disabled="index === store.incomes.length - 1"
+              @click="store.moveIncome(item.id, 1)"
+            />
+            <el-button
+              :icon="Delete"
+              size="small"
+              text
+              type="danger"
+              @click="store.removeIncome(item.id)"
+            />
+          </div>
         </div>
 
         <div class="income-item__foot">
@@ -277,7 +277,7 @@ const annualTotal = computed(() => result.value.annual.gross)
 
 .income-editor__summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 240px));
   gap: 8px;
 }
 
@@ -334,25 +334,36 @@ const annualTotal = computed(() => result.value.annual.gross)
 .income-item__head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .income-item__name {
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 120px;
 }
 
-.income-item__body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 金额/周期固定宽度，窄屏时靠 flex-wrap 换行而不是被压扁 */
+.income-item__amount {
+  width: 150px;
 }
 
 .income-item__cycle {
-  width: 120px;
+  width: 118px;
 }
 
 .income-item__month {
   width: 88px;
+}
+
+.income-item__ops {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.income-item__ops .el-button + .el-button {
+  margin-left: 0;
 }
 
 .income-item__foot {
@@ -366,16 +377,18 @@ const annualTotal = computed(() => result.value.annual.gross)
   width: 130px;
 }
 
+/* 阶段格子按内容宽度和左对齐排列，避免三列均分全宽时勾选框与金额框错位 */
 .income-item__stage-amounts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
 }
 
 .stage-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 190px;
 }
 
 .stage-cell__switch {
@@ -392,7 +405,7 @@ const annualTotal = computed(() => result.value.annual.gross)
 
 .income-item__months {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 6px;
 }
 
