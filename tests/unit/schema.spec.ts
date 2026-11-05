@@ -29,6 +29,59 @@ describe('表格 Schema 导入导出', () => {
     expect(restored?.custom?.intoBase).toBe(true)
   })
 
+  it('税后扣款项同步为表格列，删除项目时清理对应列', () => {
+    const store = useTableSchemaStore()
+    store.syncPostTaxColumns([
+      {
+        id: 'utility',
+        name: '水电费',
+        enabled: true,
+        monthlyAmounts: Array<number>(12).fill(0),
+      },
+    ])
+    const column = store.columns.find((item) => item.key === 'posttax_utility')
+    expect(column?.label).toBe('水电费')
+    expect(column?.group).toBe('deduction')
+    expect(column?.visible).toBe(true)
+
+    store.syncPostTaxColumns([])
+    expect(store.columns.some((item) => item.key.startsWith('posttax_'))).toBe(false)
+  })
+
+  it('计分制收入项同步分数列，关闭后清理', () => {
+    const store = useTableSchemaStore()
+    const income = {
+      id: 'performance',
+      name: '绩效',
+      amount: 0,
+      cycle: 'monthly' as const,
+      month: 1,
+      intoInsuranceBase: false,
+      taxable: true,
+      kind: 'salary' as const,
+      enabled: true,
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
+      nonCash: false,
+      variableByMonth: false,
+      scoreBased: true,
+      perPointAmount: 20,
+      monthlyScores: Array<number>(12).fill(0),
+    }
+    store.syncDynamicColumns([income])
+    store.syncScoreColumns([income])
+    const column = store.columns.find((item) => item.key === 'score_performance')
+    expect(column?.label).toBe('绩效(分)')
+    expect(column?.formatter).toBe('number')
+    // 分数列紧挨金额列之后
+    const amountColumn = store.columns.find((item) => item.key === 'performance')
+    expect((column?.order ?? 0) > (amountColumn?.order ?? 0)).toBe(true)
+
+    store.syncScoreColumns([])
+    expect(store.columns.some((item) => item.key.startsWith('score_'))).toBe(false)
+  })
+
   it('导入脏数据时补齐缺失字段而不抛错', () => {
     const store = useTableSchemaStore()
     expect(() =>

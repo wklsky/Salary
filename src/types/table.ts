@@ -6,7 +6,7 @@
 
 export type ColumnGroup = 'basic' | 'income' | 'insurance' | 'deduction' | 'tax' | 'result'
 
-export type ColumnFormatter = 'month' | 'money' | 'percent' | 'text'
+export type ColumnFormatter = 'month' | 'money' | 'percent' | 'text' | 'number'
 
 /**
  * 用户自定义列的附加定义
@@ -50,4 +50,6 @@ export interface ColumnPreset {
   visibleKeys: string[]
   /** 是否纳入用户自定义的收入项列；收入项数量不固定，无法枚举到 visibleKeys */
   includeIncomeColumns: boolean
+  /** 动态收入列的插入锚点：排在该列之后；缺省时追加在预设列末尾 */
+  incomeColumnAfter?: string
 }

@@ -5,10 +5,10 @@
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { createDefaultIncomes } from '@/config/presets'
+import { createDefaultIncomes, createDefaultPostTaxDeductions } from '@/config/presets'
 import { DEDUCTION_CATALOG, DEDUCTION_LIST } from '@/config/specialDeductions'
 import { createDefaultStages, createStage } from '@/config/stages'
-import { amountOfMonth, OTHER_INCOME_LABELS, stageTypeOfMonth } from '@/core'
+import { amountOfMonth, OTHER_INCOME_LABELS, round2, stageTypeOfMonth } from '@/core'
 import { createId } from '@/utils/id'
 import { INSURANCE_TYPES } from '@/types'
 import type {
@@ -21,6 +21,7 @@ import type {
   InsuranceItemConfig,
   InsuranceType,
   MonthOverride,
+  PostTaxDeductionItem,
   StageRange,
   StageType,
   TaxpayerType,
@@ -46,6 +47,8 @@ export interface SalaryScheme {
   stages: StageRange[]
   /** 单月数据覆盖；旧存档缺失时视为无覆盖 */
   monthOverrides?: Record<number, MonthOverride>
+  /** 税后扣款项目；旧存档缺失时按默认项补齐 */
+  postTaxDeductions?: PostTaxDeductionItem[]
 }
 
 /** 方案携带的设置项，应用方案时同步回设置 store */
@@ -102,6 +105,8 @@ export const useSalaryStore = defineStore(
     const stages = ref<StageRange[]>(createDefaultStages())
     /** 单月数据覆盖，key 为月份；用于表达「某月与规则不同」的实际发放 */
     const monthOverrides = ref<Record<number, MonthOverride>>({})
+    /** 税后扣款项目（宿舍水电费、管理费等），逐月填写并从实发工资中扣除 */
+    const postTaxDeductions = ref<PostTaxDeductionItem[]>(createDefaultPostTaxDeductions())
     const schemes = ref<SalaryScheme[]>([])
 
     /** 已启用的收入项，表格动态列以此为数据源 */
@@ -133,6 +138,9 @@ export const useSalaryStore = defineStore(
         stageEnabled: {},
         nonCash: false,
         variableByMonth: false,
+        scoreBased: false,
+        perPointAmount: 20,
+        monthlyScores: Array<number>(12).fill(0),
       }
       incomes.value.push(item)
       return item
@@ -200,6 +208,53 @@ export const useSalaryStore = defineStore(
     }
 
     /**
+     * 切换计分制
+     * 开启时按当前金额与默认每分金额反算初始分数，避免切换后金额突变为 0
+     */
+    function toggleScoreBased(id: string, value: boolean) {
+      const target = incomes.value.find((item) => item.id === id)
+      if (!target || target.scoreBased === value) return
+      if (!value) {
+        target.scoreBased = false
+        return
+      }
+
+      const rate =
+        typeof target.perPointAmount === 'number' && target.perPointAmount > 0
+          ? target.perPointAmount
+          : 20
+      // 必须在置位 scoreBased 前读取金额，否则 amountOfMonth 会直接按分数口径返回 0
+      const scores = Array.from({ length: 12 }, (_, index) =>
+        round2(amountOfMonth(target, index + 1, stageTypeOfMonth(stages.value, index + 1)) / rate),
+      )
+      target.perPointAmount = rate
+      target.monthlyScores = target.monthlyScores?.some((score) => score > 0)
+        ? target.monthlyScores
+        : scores
+      target.scoreBased = true
+      // 计分制按逐月分数发放，强制为逐月口径，避免遗留一次性发放配置
+      target.cycle = 'monthly'
+      target.month = 1
+      // 清除该项旧的单月金额覆盖，避免覆盖值继续压过分数口径
+      Object.values(monthOverrides.value).forEach((override) => {
+        if (override?.amounts && target.id in override.amounts) {
+          delete override.amounts[target.id]
+        }
+      })
+    }
+
+    /** 设置计分制收入项某月的分数 */
+    function updateMonthlyScore(id: string, month: number, score: number) {
+      const target = incomes.value.find((item) => item.id === id)
+      if (!target) return
+      const list = Array.isArray(target.monthlyScores)
+        ? [...target.monthlyScores]
+        : Array<number>(12).fill(0)
+      list[month - 1] = round2(score)
+      target.monthlyScores = list
+    }
+
+    /**
      * 补齐历史存档缺失的阶段字段
      * 早期版本的收入项没有 staged / stageAmounts / stageEnabled，
      * 直接读取会让内核抛错，故在读取存档与初始化时统一兜底
@@ -212,6 +267,15 @@ export const useSalaryStore = defineStore(
         variableByMonth: item.variableByMonth ?? false,
         stageAmounts: item.stageAmounts ?? {},
         stageEnabled: item.stageEnabled ?? {},
+        scoreBased: item.scoreBased ?? false,
+        perPointAmount:
+          typeof item.perPointAmount === 'number' && Number.isFinite(item.perPointAmount)
+            ? item.perPointAmount
+            : 20,
+        monthlyScores: Array.from({ length: 12 }, (_, index) => {
+          const value = Number(item.monthlyScores?.[index])
+          return Number.isFinite(value) ? value : 0
+        }),
       }))
     }
 
@@ -223,6 +287,8 @@ export const useSalaryStore = defineStore(
       if (typeof monthOverrides.value !== 'object' || monthOverrides.value === null) {
         monthOverrides.value = {}
       }
+      // 税后扣款为后加能力，缺失时补默认的水电费/管理费，金额为 0 不影响旧存档结果
+      postTaxDeductions.value = normalizePostTaxDeductions(postTaxDeductions.value)
       // 阶段停缴险种为后加能力，缺失时视为不停缴，保证行为不变
       stages.value = stages.value.map((stage) => ({
         ...stage,
@@ -309,12 +375,62 @@ export const useSalaryStore = defineStore(
       })
     }
 
+    /** 补齐旧存档缺失的税后扣款字段，逐月金额统一修正为 12 项 */
+    function normalizePostTaxDeductions(list: unknown): PostTaxDeductionItem[] {
+      if (!Array.isArray(list)) return createDefaultPostTaxDeductions()
+      return list.map((item, index) => {
+        const source = (item ?? {}) as Partial<PostTaxDeductionItem>
+        const monthlyAmounts = Array.isArray(source.monthlyAmounts) ? source.monthlyAmounts : []
+        return {
+          id: typeof source.id === 'string' && source.id ? source.id : `posttax_${index + 1}`,
+          name: typeof source.name === 'string' && source.name ? source.name : '扣款项',
+          enabled: source.enabled !== false,
+          // 未显式关闭时默认参与总扣款，兼容旧存档
+          intoTotalDeduction: source.intoTotalDeduction !== false,
+          monthlyAmounts: Array.from({ length: 12 }, (_, monthIndex) => {
+            const value = Number(monthlyAmounts[monthIndex])
+            return Number.isFinite(value) ? value : 0
+          }),
+        }
+      })
+    }
+
+    function addPostTaxDeduction() {
+      postTaxDeductions.value.push({
+        id: createId('posttax'),
+        name: '新增扣款项',
+        enabled: true,
+        intoTotalDeduction: true,
+        monthlyAmounts: Array<number>(12).fill(0),
+      })
+    }
+
+    function removePostTaxDeduction(id: string) {
+      postTaxDeductions.value = postTaxDeductions.value.filter((item) => item.id !== id)
+    }
+
+    function updatePostTaxDeduction(id: string, payload: Partial<PostTaxDeductionItem>) {
+      const target = postTaxDeductions.value.find((item) => item.id === id)
+      if (!target) return
+      Object.assign(target, payload)
+    }
+
+    /** 设置某税后扣款项在指定月份的金额，下标 0-11 对应 1-12 月 */
+    function setPostTaxMonthlyAmount(id: string, month: number, amount: number) {
+      const target = postTaxDeductions.value.find((item) => item.id === id)
+      if (!target) return
+      const values = [...target.monthlyAmounts]
+      values[month - 1] = amount
+      target.monthlyAmounts = values
+    }
+
     function resetAll() {
       incomes.value = createDefaultIncomes()
       insurance.value = createDefaultInsurance()
       deductions.value = createDefaultDeductions()
       stages.value = createDefaultStages()
       monthOverrides.value = {}
+      postTaxDeductions.value = createDefaultPostTaxDeductions()
     }
 
     /** 取某月的覆盖对象，缺失时创建，避免调用方判空 */
@@ -338,6 +454,11 @@ export const useSalaryStore = defineStore(
     function setMonthInsuranceBase(month: number, base: number | undefined) {
       const override = ensureMonthOverride(month)
       override.insuranceBase = base
+    }
+
+    function setMonthHousingFundBase(month: number, base: number | undefined) {
+      const override = ensureMonthOverride(month)
+      override.housingFundBase = base
     }
 
     function setMonthNote(month: number, note: string) {
@@ -372,6 +493,9 @@ export const useSalaryStore = defineStore(
           number,
           MonthOverride
         >,
+        postTaxDeductions: JSON.parse(
+          JSON.stringify(postTaxDeductions.value),
+        ) as PostTaxDeductionItem[],
       }
       schemes.value.push(scheme)
       return scheme
@@ -387,6 +511,9 @@ export const useSalaryStore = defineStore(
       monthOverrides.value = (JSON.parse(
         JSON.stringify(scheme.monthOverrides ?? {}),
       ) as Record<number, MonthOverride>) ?? {}
+      postTaxDeductions.value = normalizePostTaxDeductions(
+        JSON.parse(JSON.stringify(scheme.postTaxDeductions ?? null)),
+      )
       return {
         year: scheme.year,
         startMonth: scheme.startMonth,
@@ -413,6 +540,9 @@ export const useSalaryStore = defineStore(
           number,
           MonthOverride
         >,
+        postTaxDeductions: JSON.parse(
+          JSON.stringify(postTaxDeductions.value),
+        ) as PostTaxDeductionItem[],
       }
     }
 
@@ -422,6 +552,7 @@ export const useSalaryStore = defineStore(
       deductions?: DeductionStateMap
       stages?: StageRange[]
       monthOverrides?: Record<number, MonthOverride>
+      postTaxDeductions?: PostTaxDeductionItem[]
     }) {
       if (Array.isArray(payload.incomes)) incomes.value = normalizeIncomes(payload.incomes)
       if (payload.insurance) insurance.value = { ...createDefaultInsurance(), ...payload.insurance }
@@ -432,6 +563,9 @@ export const useSalaryStore = defineStore(
       if (payload.monthOverrides && typeof payload.monthOverrides === 'object') {
         monthOverrides.value = payload.monthOverrides
       }
+      if (Array.isArray(payload.postTaxDeductions)) {
+        postTaxDeductions.value = normalizePostTaxDeductions(payload.postTaxDeductions)
+      }
     }
 
     return {
@@ -440,6 +574,7 @@ export const useSalaryStore = defineStore(
       deductions,
       stages,
       monthOverrides,
+      postTaxDeductions,
       schemes,
       activeIncomes,
       bonusTotal,
@@ -452,8 +587,11 @@ export const useSalaryStore = defineStore(
       toggleStagedIncome,
       toggleVariableByMonth,
       updateMonthlyAmount,
+      toggleScoreBased,
+      updateMonthlyScore,
       setMonthAmount,
       setMonthInsuranceBase,
+      setMonthHousingFundBase,
       setMonthNote,
       resetMonth,
       moveIncome,
@@ -464,6 +602,10 @@ export const useSalaryStore = defineStore(
       updateInsuranceItem,
       updateDeduction,
       toggleDeduction,
+      addPostTaxDeduction,
+      removePostTaxDeduction,
+      updatePostTaxDeduction,
+      setPostTaxMonthlyAmount,
       resetAll,
       saveScheme,
       applyScheme,

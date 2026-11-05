@@ -8,11 +8,12 @@ import { DEDUCTION_KEYS } from '@/types'
 import type { DeductionKey, DeductionStateMap, MonthOverride } from '@/types'
 import type { IncomeItem } from '@/types'
 import type { InsuranceMonthDetail, MonthlyResult } from '@/types'
+import type { PostTaxDeductionItem } from '@/types'
 import type { StageRange, TaxpayerType } from '@/types'
 import { ANNUAL_TAX_BRACKETS, MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { DEDUCTION_CATALOG } from '@/config/specialDeductions'
 import { isOtherIncomeKind, otherIncomeAmount, otherIncomeTax } from './otherIncome'
-import { amountOfMonth, stageTypeOfMonth } from './stage'
+import { amountOfMonth, scoreOfMonth, stageTypeOfMonth } from './stage'
 import { bonusTaxSeparate, taxByBrackets } from './bonus'
 import { dec, nonNegative, round2, sumMoney } from './money'
 
@@ -40,6 +41,8 @@ export interface EngineContext {
   taxReductionMonthly: number
   /** 单月数据覆盖，缺省月份按收入项自身口径计算 */
   monthOverrides: Record<number, MonthOverride>
+  /** 税后扣款项目，如宿舍水电费、管理费；只减少到手，不影响计税与缴费基数 */
+  postTaxDeductions?: PostTaxDeductionItem[]
 }
 
 export interface EngineResult extends AnnualSnapshot {
@@ -72,6 +75,8 @@ interface MonthIncome {
   otherIncome: number
   /** 各收入项当月金额，key 为 IncomeItem.id */
   breakdown: Record<string, number>
+  /** 各计分制收入项当月分数，key 为 IncomeItem.id */
+  scores: Record<string, number>
 }
 
 /** 汇总当月收入：区分应发总额、并入综合所得部分、免税部分与非现金福利 */
@@ -86,8 +91,10 @@ function incomeOfMonth(
 ): MonthIncome {
   const enabled = incomes.filter((item) => item.enabled)
   const breakdown: Record<string, number> = {}
+  const scores: Record<string, number> = {}
   enabled.forEach((item) => {
     breakdown[item.id] = 0
+    if (item.scoreBased) scores[item.id] = 0
   })
 
   const zero: MonthIncome = {
@@ -98,11 +105,16 @@ function incomeOfMonth(
     otherTax: 0,
     otherIncome: 0,
     breakdown,
+    scores,
   }
   // 入职前与离职后均无收入
   if (month < startMonth || month > endMonth) return zero
 
   const stage = stageTypeOfMonth(stages, month)
+  // 分数是录入值，即使该阶段停发也保留展示，便于核对绩效评分
+  enabled.forEach((item) => {
+    if (item.scoreBased) scores[item.id] = scoreOfMonth(item, month)
+  })
 
   let gross = 0
   let comprehensive = 0
@@ -149,6 +161,7 @@ function incomeOfMonth(
     otherTax,
     otherIncome,
     breakdown,
+    scores,
   }
 }
 
@@ -250,6 +263,35 @@ function bonusTaxOfMonth(
 }
 
 /**
+ * 当月税后扣款合计
+ * 税后扣款在个税计算之后从实发工资中扣除，不参与应纳税所得额，也不计入缴费基数
+ */
+function postTaxDeductionOfMonth(
+  items: PostTaxDeductionItem[],
+  month: number,
+  startMonth: number,
+  endMonth: number,
+): { total: number; breakdown: Record<string, number> } {
+  const breakdown: Record<string, number> = {}
+  // 未在职的月份不产生扣款
+  if (month < startMonth || month > endMonth) return { total: 0, breakdown }
+
+  let total = 0
+  items
+    .filter((item) => item.enabled)
+    .forEach((item) => {
+      const value = round2(item.monthlyAmounts?.[month - 1] ?? 0)
+      if (value <= 0) return
+      breakdown[item.id] = value
+      // 未勾选「计入总扣款」的项目仅展示，不减少实发工资
+      if (item.intoTotalDeduction === false) return
+      total = round2(dec(total).plus(value))
+    })
+
+  return { total, breakdown }
+}
+
+/**
  * 逐月计税主循环
  * 居民个人：本期应预扣 = 累计应纳税所得额查年度税率表 - 累计已预扣 - 累计减免，负数不退税留待汇算
  * 非居民个人：按月收入单独计税，不累计、不享受专项附加扣除
@@ -276,6 +318,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
   let bonusTaxAnnual = 0
   let otherTaxAnnual = 0
   let otherIncomeAnnual = 0
+  let postTaxAnnual = 0
   let netAnnual = 0
   let deductionMonthlyAnnual = 0
   let deductionAllAnnual = 0
@@ -375,15 +418,19 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
     // 非居民个人的额外收入已并入当月应纳税所得额统一计税，不能再叠加按次预扣税
     const otherPrepaid = isResident ? income.otherTax : 0
     const taxTotal = round2(dec(currentTax).plus(bonusTax).plus(otherPrepaid))
-    // 到手 = 应发 − 五险一金个人 − 个税（含额外收入预扣）− 非现金福利
-    const net = round2(
-      dec(income.gross)
-        .minus(insurance.personalTotal)
-        .minus(currentTax)
-        .minus(bonusTax)
-        .minus(otherPrepaid)
-        .minus(income.nonCash),
+    // 税后扣款只减少到手，不进入应纳税所得额
+    const postTax = postTaxDeductionOfMonth(
+      ctx.postTaxDeductions ?? [],
+      month,
+      ctx.startMonth,
+      ctx.endMonth,
     )
+    // 总扣款 = 五险一金个人 + 个税（含年终奖/额外收入预扣）+ 税后扣款
+    const totalDeduction = round2(
+      dec(insurance.personalTotal).plus(taxTotal).plus(postTax.total),
+    )
+    // 到手 = 应发 − 非现金福利 − 总扣款
+    const net = round2(dec(income.gross).minus(income.nonCash).minus(totalDeduction))
 
     grossAnnual = round2(dec(grossAnnual).plus(income.gross))
     comprehensiveAnnual = round2(dec(comprehensiveAnnual).plus(income.comprehensive))
@@ -395,6 +442,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
     bonusTaxAnnual = round2(dec(bonusTaxAnnual).plus(bonusTax))
     otherTaxAnnual = round2(dec(otherTaxAnnual).plus(otherPrepaid))
     otherIncomeAnnual = round2(dec(otherIncomeAnnual).plus(income.otherIncome))
+    postTaxAnnual = round2(dec(postTaxAnnual).plus(postTax.total))
     netAnnual = round2(dec(netAnnual).plus(net))
     deductionMonthlyAnnual = round2(dec(deductionMonthlyAnnual).plus(deductionTotal))
     deductionAllAnnual = round2(dec(deductionAllAnnual).plus(deductionAll))
@@ -413,6 +461,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       basicDeduction,
       deductionTotal,
       incomeBreakdown: income.breakdown,
+      incomeScores: income.scores,
       cumulativeTaxable: taxableIncome,
       cumulativeTaxPaid: cumTaxPaid,
       tax: currentTax,
@@ -421,6 +470,10 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       otherIncome: income.otherIncome,
       customValues: {},
       taxTotal,
+      postTaxDeduction: postTax.total,
+      postTaxDeductionBreakdown: postTax.breakdown,
+      totalDeduction,
+      note: ctx.monthOverrides[month]?.note ?? '',
       net,
     })
   }
@@ -446,6 +499,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       bonusTaxAnnual,
       otherTaxAnnual,
       otherIncomeAnnual,
+      postTaxAnnual,
       netAnnual,
       taxableIncome,
     }),
@@ -465,6 +519,8 @@ interface AnnualSnapshotInput {
   otherTaxAnnual: number
   /** 全年额外收入的汇算口径收入额 */
   otherIncomeAnnual: number
+  /** 全年税后扣款合计 */
+  postTaxAnnual: number
   netAnnual: number
   taxableIncome: number
 }
@@ -481,6 +537,8 @@ interface AnnualSnapshot {
   otherIncome: number
   insurancePersonal: number
   insuranceCompany: number
+  postTaxDeduction: number
+  totalDeduction: number
   companyCost: number
   taxableIncome: number
   tax: number
@@ -503,6 +561,10 @@ function buildAnnualSnapshot(input: AnnualSnapshotInput): AnnualSnapshot {
     otherIncome: input.otherIncomeAnnual,
     insurancePersonal: input.insurancePersonalAnnual,
     insuranceCompany: input.insuranceCompanyAnnual,
+    postTaxDeduction: input.postTaxAnnual,
+    totalDeduction: round2(
+      dec(input.insurancePersonalAnnual).plus(taxTotal).plus(input.postTaxAnnual),
+    ),
     companyCost: round2(dec(input.grossAnnual).plus(input.insuranceCompanyAnnual)),
     taxableIncome: input.taxableIncome,
     tax: taxTotal,

@@ -48,7 +48,9 @@ export function useExport() {
           if (typeof value === 'number') {
             // 百分比列换算成百分数，月份列输出整数，其余金额保留两位小数
             if (column.formatter === 'percent') return (value * 100).toFixed(2)
-            if (column.formatter === 'month') return String(value)
+            if (column.formatter === 'month' || column.formatter === 'number') {
+              return String(value)
+            }
             return value.toFixed(2)
           }
           return escapeCsv(value)

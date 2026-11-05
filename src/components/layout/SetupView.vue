@@ -8,6 +8,7 @@ import { computed, nextTick, ref } from 'vue'
 import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import { POLICY_DISCLAIMER } from '@/config/policy'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
+import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEditor.vue'
 import IncomeEditor from '@/components/income/IncomeEditor.vue'
 import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
 import StageEditor from '@/components/stage/StageEditor.vue'
@@ -41,10 +42,22 @@ const BONUS_MODE_OPTIONS: { value: BonusMode; label: string }[] = [
   { value: 'merged', label: '并入综合所得' },
 ]
 
-type SectionKey = 'period' | 'income' | 'insurance' | 'stage' | 'deduction' | 'advanced'
+type SectionKey =
+  | 'period'
+  | 'income'
+  | 'insurance'
+  | 'stage'
+  | 'deduction'
+  | 'posttax'
+  | 'advanced'
 
 /** 表单较重且非必填的分区默认收起，点击分区导航时自动展开 */
-const COLLAPSIBLE_SECTIONS = new Set<SectionKey>(['stage', 'deduction', 'advanced'])
+const COLLAPSIBLE_SECTIONS = new Set<SectionKey>([
+  'stage',
+  'deduction',
+  'posttax',
+  'advanced',
+])
 const openSections = ref<SectionKey[]>([])
 
 function isOpen(key: SectionKey): boolean {
@@ -80,6 +93,9 @@ const cityName = computed(() => resolveCity(salaryStore.insurance.cityCode).name
 const enabledDeductionCount = computed(
   () => Object.values(salaryStore.deductions).filter((item) => item?.enabled).length,
 )
+const enabledPostTaxCount = computed(
+  () => salaryStore.postTaxDeductions.filter((item) => item.enabled).length,
+)
 const taxpayerLabel = computed(() =>
   settingsStore.taxpayerType === 'resident' ? '居民个人' : '非居民个人',
 )
@@ -91,7 +107,8 @@ const navItems = computed<{ key: SectionKey; index: string; label: string; meta:
   { key: 'insurance', index: '03', label: '五险一金', meta: cityName.value },
   { key: 'stage', index: '04', label: '雇佣阶段', meta: `${salaryStore.stages.length} 段` },
   { key: 'deduction', index: '05', label: '专项扣除', meta: `${enabledDeductionCount.value} 项` },
-  { key: 'advanced', index: '06', label: '高级设置', meta: taxpayerLabel.value },
+  { key: 'posttax', index: '06', label: '税后扣款', meta: `${enabledPostTaxCount.value} 项` },
+  { key: 'advanced', index: '07', label: '高级设置', meta: taxpayerLabel.value },
 ])
 
 const annual = computed(() => result.value.annual)
@@ -111,6 +128,12 @@ const segments = computed(() => {
       ratio: annual.value.insurancePersonal / gross,
     },
     { key: 'tax', label: '个税', value: annual.value.tax, ratio: annual.value.tax / gross },
+    {
+      key: 'postTax',
+      label: '税后扣款',
+      value: annual.value.postTaxDeduction,
+      ratio: annual.value.postTaxDeduction / gross,
+    },
     {
       key: 'nonCash',
       label: '非现金福利',
@@ -268,9 +291,35 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
           </div>
         </section>
 
-        <section id="section-advanced" class="panel">
+        <section id="section-posttax" class="panel">
           <header class="panel__head">
             <span class="panel__index">06</span>
+            <div class="panel__titles">
+              <h2 class="panel__title">税后扣款</h2>
+              <p class="panel__desc">
+                宿舍水电费、管理费等，在个税与五险一金之后从实发工资中扣除
+              </p>
+            </div>
+            <span class="panel__meta">{{ enabledPostTaxCount }} 项已启用</span>
+            <button
+              type="button"
+              class="panel__toggle"
+              :aria-expanded="isOpen('posttax')"
+              aria-controls="section-body-posttax"
+              @click="toggleSection('posttax')"
+            >
+              {{ isOpen('posttax') ? '收起' : '展开' }}
+              <el-icon :class="{ 'is-open': isOpen('posttax') }"><ArrowDown /></el-icon>
+            </button>
+          </header>
+          <div v-if="isOpen('posttax')" id="section-body-posttax" class="panel__body">
+            <PostTaxDeductionEditor />
+          </div>
+        </section>
+
+        <section id="section-advanced" class="panel">
+          <header class="panel__head">
+            <span class="panel__index">07</span>
             <div class="panel__titles">
               <h2 class="panel__title">高级设置</h2>
               <p class="panel__desc">纳税人身份、每月减免税额与年终奖计税口径</p>
@@ -372,6 +421,10 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
             <div>
               <dt>年度个税</dt>
               <dd class="num">¥{{ formatMoney(annual.tax) }}</dd>
+            </div>
+            <div v-if="annual.postTaxDeduction > 0">
+              <dt>税后扣款</dt>
+              <dd class="num">¥{{ formatMoney(annual.postTaxDeduction) }}</dd>
             </div>
             <div v-if="annual.nonCashIncome > 0">
               <dt>非现金福利</dt>
@@ -481,7 +534,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .setup__aside {
   position: sticky;
-  top: 88px;
+  top: 12px;
 }
 
 .panel {
@@ -490,7 +543,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   border-radius: 16px;
   background: var(--app-surface);
   box-shadow: var(--app-shadow-sm);
-  scroll-margin-top: 88px;
+  scroll-margin-top: 12px;
 }
 
 .panel__head {
@@ -691,6 +744,11 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 .payslip__bar-seg.is-tax,
 .payslip__dot.is-tax {
   background: #e9a23b;
+}
+
+.payslip__bar-seg.is-postTax,
+.payslip__dot.is-postTax {
+  background: #c86b8a;
 }
 
 .payslip__bar-seg.is-nonCash,

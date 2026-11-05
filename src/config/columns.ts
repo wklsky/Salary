@@ -30,6 +30,12 @@ export const INSURANCE_COLUMN_PREFIX = 'ins_'
 /** 保险列（单位缴纳）的 key 前缀 */
 export const INSURANCE_COMPANY_COLUMN_PREFIX = 'inscomp_'
 
+/** 税后扣款项目列的 key 前缀，后接 PostTaxDeductionItem.id */
+export const POST_TAX_COLUMN_PREFIX = 'posttax_'
+
+/** 计分制收入项分数列的 key 前缀，后接 IncomeItem.id */
+export const SCORE_COLUMN_PREFIX = 'score_'
+
 export function insuranceColumnKey(type: InsuranceType): string {
   return `${INSURANCE_COLUMN_PREFIX}${type}`
 }
@@ -86,6 +92,27 @@ export function createStaticColumns(): ColumnSchema[] {
       order: 8,
       width: 80,
       formatter: 'text',
+      dynamic: false,
+    },
+    {
+      key: 'note',
+      label: '备注',
+      group: 'basic',
+      visible: false,
+      order: 9,
+      width: 200,
+      formatter: 'text',
+      dynamic: false,
+    },
+    {
+      // 现金应发：剔除饭票等非现金福利，口径与实发工资的扣减基数一致
+      key: 'cashGross',
+      label: '应发工资',
+      group: 'income',
+      visible: false,
+      order: 99,
+      width: 120,
+      formatter: 'money',
       dynamic: false,
     },
     {
@@ -161,7 +188,7 @@ export function createStaticColumns(): ColumnSchema[] {
     },
     {
       key: 'insurancePersonal',
-      label: '五险一金(个人)',
+      label: '缴纳共计',
       group: 'insurance',
       visible: true,
       order: 210,
@@ -196,6 +223,27 @@ export function createStaticColumns(): ColumnSchema[] {
       group: 'deduction',
       visible: true,
       order: 301,
+      width: 130,
+      formatter: 'money',
+      dynamic: false,
+    },
+    {
+      // 各税后扣款项（水电费、管理费等）的汇总列
+      key: 'postTaxDeduction',
+      label: '税后扣款合计',
+      group: 'deduction',
+      visible: true,
+      order: 320,
+      width: 130,
+      formatter: 'money',
+      dynamic: false,
+    },
+    {
+      key: 'totalDeduction',
+      label: '总扣款',
+      group: 'deduction',
+      visible: true,
+      order: 321,
       width: 130,
       formatter: 'money',
       dynamic: false,
@@ -263,7 +311,7 @@ export function createStaticColumns(): ColumnSchema[] {
     },
     {
       key: 'net',
-      label: '到手工资',
+      label: '实发工资',
       group: 'result',
       visible: true,
       order: 501,

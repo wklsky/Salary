@@ -6,6 +6,7 @@
 import { FALLBACK_STAGE } from '@/config/stages'
 import { INSURANCE_TYPES } from '@/types'
 import type { IncomeItem, InsuranceType, StageRange, StageType } from '@/types'
+import { dec, round2 } from './money'
 
 /** 定位某月所属阶段，未命中任何区间时返回 null */
 export function resolveStageOfMonth(stages: StageRange[], month: number): StageRange | null {
@@ -54,11 +55,21 @@ export function isItemEnabledInStage(item: IncomeItem, stage: StageType): boolea
  */
 export function amountOfMonth(item: IncomeItem, month: number, stage: StageType): number {
   if (!isItemEnabledInStage(item, stage)) return 0
+  // 计分制：当月金额 = 当月分数 × 每分金额，金额直接以分数为准
+  if (item.scoreBased) {
+    return round2(dec(scoreOfMonth(item, month)).mul(item.perPointAmount ?? 0))
+  }
   if (item.variableByMonth) {
     const value = item.monthlyAmounts?.[month - 1]
     if (typeof value === 'number') return value
   }
   return amountOfStage(item, stage)
+}
+
+/** 计分制收入项在某月的分数，非计分制返回 0 */
+export function scoreOfMonth(item: IncomeItem, month: number): number {
+  if (!item.scoreBased) return 0
+  return round2(item.monthlyScores?.[month - 1] ?? 0)
 }
 
 /**
@@ -67,6 +78,8 @@ export function amountOfMonth(item: IncomeItem, month: number, stage: StageType)
  */
 export function amountOfStage(item: IncomeItem, stage: StageType): number {
   if (!isItemEnabledInStage(item, stage)) return 0
+  // 计分制按逐月分数计价，阶段金额不适用
+  if (item.scoreBased) return 0
   if (!item.staged) return item.amount
   const value = item.stageAmounts?.[stage]
   return typeof value === 'number' ? value : item.amount

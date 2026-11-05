@@ -163,12 +163,12 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
     // 单月核定的基数优先，仍受上下限约束，避免填出低于下限的基数
     const overrideBase = params.monthOverrides?.[month]?.insuranceBase
     const rawBase = typeof overrideBase === 'number' ? overrideBase : autoRawBase
-    const housingRawBase = resolveHousingFundRawBase(
-      params.insurance,
-      city,
-      baseIncome,
-      rawBase,
-    )
+    // 公积金基数可单独核定，用于「社保基数上调、公积金不变」等场景
+    const overrideHousingBase = params.monthOverrides?.[month]?.housingFundBase
+    const housingRawBase =
+      typeof overrideHousingBase === 'number'
+        ? overrideHousingBase
+        : resolveHousingFundRawBase(params.insurance, city, baseIncome, rawBase)
 
     const base = params.insurance.clampEnabled
       ? clampNumber(rawBase, socialRange.lower, socialRange.upper)

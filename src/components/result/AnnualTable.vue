@@ -146,6 +146,15 @@ const deductionRows = computed(() => {
           },
         ]
       : []),
+    ...(annual.postTaxDeduction > 0
+      ? [
+          {
+            name: '税后扣款（不影响计税）',
+            amount: annual.postTaxDeduction,
+            note: '宿舍水电费、管理费等，在个税之后从实发工资中扣除',
+          },
+        ]
+      : []),
     ...(Math.abs(annual.settlementDiff) >= 0.01
       ? [
           {

@@ -10,6 +10,7 @@ import { createPinia } from 'pinia'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import BonusAdvice from '@/components/result/BonusAdvice.vue'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
+import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEditor.vue'
 import IncomeEditor from '@/components/income/IncomeEditor.vue'
 import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
 import MonthEditorDrawer from '@/components/month/MonthEditorDrawer.vue'
@@ -31,6 +32,13 @@ describe('组件挂载冒烟', () => {
 
   it('DeductionEditor 可挂载', () => {
     expect(mountWith(DeductionEditor).text()).toContain('月度可扣')
+  })
+
+  it('PostTaxDeductionEditor 可挂载并渲染默认扣款项', () => {
+    const text = mountWith(PostTaxDeductionEditor).text()
+    expect(text).toContain('年度税后扣款')
+    expect(text).toContain('水电费')
+    expect(text).toContain('管理费')
   })
 
   it('BonusAdvice 可挂载', () => {

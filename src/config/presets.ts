@@ -3,7 +3,7 @@
  * @FilePath: src/config/presets.ts
  * @Description: 列展示预设与默认收入项模板
  */
-import type { ColumnPreset, IncomeItem } from '@/types'
+import type { ColumnPreset, IncomeItem, PostTaxDeductionItem } from '@/types'
 
 /** 内置列预设：面向不同使用角色给出开箱可用的列组合 */
 export const COLUMN_PRESETS: ColumnPreset[] = [
@@ -27,10 +27,37 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
       'ins_housingFund',
       'deductionTotal',
       'taxTotal',
+      'postTaxDeduction',
+      'totalDeduction',
       'net',
       'netRate',
     ],
     includeIncomeColumns: true,
+  },
+  {
+    id: 'payslip',
+    name: '工资表（含宿舍扣款）',
+    builtin: true,
+    // 对齐 Excel 工资表口径：应发工资、各险种个人、缴纳共计、个税、税后扣款、总扣款、实发工资
+    visibleKeys: [
+      'month',
+      'cashGross',
+      'ins_pension',
+      'ins_medical',
+      'ins_unemployment',
+      'ins_housingFund',
+      'insurancePersonal',
+      'taxTotal',
+      'posttax_utility',
+      'posttax_management',
+      'postTaxDeduction',
+      'totalDeduction',
+      'net',
+      'note',
+    ],
+    includeIncomeColumns: true,
+    // 绩效、饭票等收入列紧跟应发工资，贴近 Excel 工资表的分项顺序
+    incomeColumnAfter: 'cashGross',
   },
   {
     id: 'finance',
@@ -91,6 +118,29 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
 ]
 
 export const DEFAULT_PRESET_ID = 'personal'
+
+/**
+ * 默认税后扣款项
+ * 对应工资表中「宿舍扣款费用」的常见构成（水电费 / 管理费），金额默认 0，由用户按月填写
+ */
+export function createDefaultPostTaxDeductions(): PostTaxDeductionItem[] {
+  return [
+    {
+      id: 'utility',
+      name: '水电费',
+      enabled: true,
+      intoTotalDeduction: true,
+      monthlyAmounts: Array<number>(12).fill(0),
+    },
+    {
+      id: 'management',
+      name: '管理费',
+      enabled: true,
+      intoTotalDeduction: true,
+      monthlyAmounts: Array<number>(12).fill(0),
+    },
+  ]
+}
 
 /** 默认收入项：覆盖最常见的薪酬结构，用户可自由增删 */
 export function createDefaultIncomes(): IncomeItem[] {

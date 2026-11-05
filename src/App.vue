@@ -4,7 +4,7 @@
  * @FilePath: src/App.vue
  * @Description: 应用外壳：视图切换（录入设置 / 月度明细）、方案存档与导入导出
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Delete, Download, MoreFilled, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SetupView from '@/components/layout/SetupView.vue'
@@ -31,6 +31,12 @@ const view = ref<AppView>('setup')
 const drawerVisible = ref(false)
 const activeSchemeId = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const bodyRef = ref<HTMLElement | null>(null)
+
+/** 内容区独立滚动，切换视图时回到顶部，避免沿用上一视图的滚动位置 */
+watch(view, () => {
+  nextTick(() => bodyRef.value?.scrollTo({ top: 0 }))
+})
 
 /**
  * 补全旧版本 localStorage 存档缺失的字段
@@ -38,14 +44,27 @@ const fileInput = ref<HTMLInputElement | null>(null)
  */
 salaryStore.normalize()
 settingsStore.normalize()
+// 旧版存档的表格 Schema / 内置预设可能缺少新增字段，启动时统一升级
+schemaStore.syncBuiltinPresets()
+schemaStore.syncStaticColumns()
 
 /**
  * 收入项增删时同步表格动态列
  * 只监听 id 与名称，避免金额微调触发无意义的列重建
  */
 watch(
-  () => salaryStore.incomes.map((item) => `${item.id}:${item.name}`),
-  () => schemaStore.syncDynamicColumns(salaryStore.incomes),
+  () => salaryStore.incomes.map((item) => `${item.id}:${item.name}:${item.scoreBased ? 1 : 0}`),
+  () => {
+    schemaStore.syncDynamicColumns(salaryStore.incomes)
+    schemaStore.syncScoreColumns(salaryStore.incomes)
+  },
+  { immediate: true, deep: true },
+)
+
+/** 税后扣款项目增删或改名时同步表格列 */
+watch(
+  () => salaryStore.postTaxDeductions.map((item) => `${item.id}:${item.name}`),
+  () => schemaStore.syncPostTaxColumns(salaryStore.postTaxDeductions),
   { immediate: true, deep: true },
 )
 
@@ -62,6 +81,7 @@ async function onExportJson() {
       bonusMode: settingsStore.bonusMode,
       taxpayerType: settingsStore.taxpayerType,
       taxReductionMonthly: settingsStore.taxReductionMonthly,
+      reverseAdjustIncomeId: settingsStore.reverseAdjustIncomeId,
       ...salaryStore.exportSnapshot(),
       // 自定义列会影响计税与应发，必须与薪资入参一起迁移
       tableSchema: schemaStore.exportSchema(),
@@ -80,16 +100,25 @@ async function onImportJson(rawFile: File) {
       bonusMode?: BonusMode
       taxpayerType?: TaxpayerType
       taxReductionMonthly?: number
+      reverseAdjustIncomeId?: string
       incomes?: Parameters<typeof salaryStore.importSnapshot>[0]['incomes']
       insurance?: Parameters<typeof salaryStore.importSnapshot>[0]['insurance']
       deductions?: Parameters<typeof salaryStore.importSnapshot>[0]['deductions']
       stages?: Parameters<typeof salaryStore.importSnapshot>[0]['stages']
       monthOverrides?: Parameters<typeof salaryStore.importSnapshot>[0]['monthOverrides']
+      postTaxDeductions?: Parameters<
+        typeof salaryStore.importSnapshot
+      >[0]['postTaxDeductions']
       tableSchema?: Parameters<typeof schemaStore.importSchema>[0]
     }>(rawFile)
 
     salaryStore.importSnapshot(payload)
     schemaStore.importSchema(payload.tableSchema)
+    // 导入的 Schema 可能是旧版本，补齐新增静态列、内置预设与税后扣款项列
+    schemaStore.syncBuiltinPresets()
+    schemaStore.syncStaticColumns()
+    schemaStore.syncPostTaxColumns(salaryStore.postTaxDeductions)
+    schemaStore.syncScoreColumns(salaryStore.incomes)
     settingsStore.updateSettings({
       year: payload.year,
       startMonth: payload.startMonth,
@@ -98,6 +127,7 @@ async function onImportJson(rawFile: File) {
       bonusMode: payload.bonusMode,
       taxpayerType: payload.taxpayerType,
       taxReductionMonthly: payload.taxReductionMonthly,
+      reverseAdjustIncomeId: payload.reverseAdjustIncomeId,
     })
     activeSchemeId.value = ''
     ElMessage.success('配置已导入')
@@ -180,6 +210,9 @@ async function onReset() {
     })
     salaryStore.resetAll()
     schemaStore.resetColumns()
+    schemaStore.syncDynamicColumns(salaryStore.incomes)
+    schemaStore.syncPostTaxColumns(salaryStore.postTaxDeductions)
+    schemaStore.syncScoreColumns(salaryStore.incomes)
     view.value = 'setup'
     ElMessage.success('已重置')
   } catch (error) {
@@ -293,7 +326,7 @@ function onCommand(command: string) {
       />
     </header>
 
-    <main class="app__body">
+    <main ref="bodyRef" class="app__body">
       <SetupView v-if="view === 'setup'" @next="view = 'table'" />
       <TableView v-else @back="view = 'setup'" @config-columns="drawerVisible = true" />
     </main>
@@ -311,14 +344,15 @@ function onCommand(command: string) {
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .app__header {
-  position: sticky;
-  top: 0;
   z-index: 20;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 18px;
   padding: 10px clamp(16px, 3vw, 28px);
@@ -462,23 +496,35 @@ function onCommand(command: string) {
 }
 
 .app__body {
-  flex: 1;
-  padding: 16px clamp(16px, 3vw, 28px) 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px clamp(16px, 3vw, 28px) 16px;
 }
 
 .app__footer {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: center;
   gap: 4px 20px;
-  padding: 22px 20px 28px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--app-line);
+  background: rgb(255 255 255 / 60%);
   font-size: 11px;
   color: var(--app-ink-300);
 }
 
+@media (max-height: 560px) {
+  /* 视口高度很小时优先把空间留给内容区，隐藏常驻页脚 */
+  .app__footer {
+    display: none;
+  }
+}
+
 @media (max-width: 860px) {
   .app__header {
-    position: static;
     gap: 10px;
     padding: 8px 14px;
   }
@@ -500,6 +546,17 @@ function onCommand(command: string) {
 
   .app__net {
     display: none;
+  }
+
+  .app__actions {
+    width: 100%;
+  }
+
+  /* 方案下拉可压缩，避免按钮被挤到第二行只剩「更多」孤零零一个 */
+  .scheme-select {
+    flex: 1 1 120px;
+    width: auto;
+    min-width: 0;
   }
 }
 </style>

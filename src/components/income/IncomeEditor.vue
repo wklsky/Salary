@@ -12,6 +12,7 @@ import {
   amountOfStage,
   isItemEnabledInStage,
   OTHER_INCOME_HINTS,
+  round2,
   stageTypeOfMonth,
 } from '@/core'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
@@ -60,6 +61,25 @@ function monthlyAmountOf(item: IncomeItem, month: number): number {
 /** 逐月金额合计，用于核对录入 */
 function monthlyAmountsSum(item: IncomeItem): number {
   return (item.monthlyAmounts ?? []).reduce((acc, value) => acc + value, 0)
+}
+
+/** 计分制收入项某月分数 */
+function scoreOf(item: IncomeItem, month: number): number {
+  return item.monthlyScores?.[month - 1] ?? 0
+}
+
+/** 计分制收入项某月折算金额 = 分数 × 每分金额 */
+function scoreAmountOf(item: IncomeItem, month: number): number {
+  return round2(scoreOf(item, month) * (item.perPointAmount ?? 0))
+}
+
+/** 计分制全年分数与金额，用于核对录入 */
+function scoreAnnual(item: IncomeItem): { score: number; amount: number } {
+  const score = (item.monthlyScores ?? []).reduce((acc, value) => acc + (value || 0), 0)
+  return {
+    score: round2(score),
+    amount: round2(score * (item.perPointAmount ?? 0)),
+  }
 }
 
 /**
@@ -117,13 +137,26 @@ const annualTotal = computed(() => result.value.annual.gross)
         <div class="income-item__head">
           <el-switch v-model="item.enabled" size="small" />
           <el-input v-model="item.name" size="small" class="income-item__name" placeholder="项目名称" />
+          <template v-if="item.scoreBased">
+            <MoneyInput
+              :model-value="item.perPointAmount ?? 0"
+              size="small"
+              class="income-item__amount"
+              @update:model-value="
+                (value: number) => store.updateIncome(item.id, { perPointAmount: value })
+              "
+            />
+            <span class="income-item__unit">元/分</span>
+          </template>
           <MoneyInput
+            v-else
             :model-value="item.amount"
             size="small"
             class="income-item__amount"
             @update:model-value="(value) => store.updateIncome(item.id, { amount: value })"
           />
           <el-select
+            v-if="!item.scoreBased"
             v-model="item.cycle"
             size="small"
             class="income-item__cycle"
@@ -136,7 +169,7 @@ const annualTotal = computed(() => result.value.annual.gross)
             />
           </el-select>
           <el-select
-            v-if="item.cycle === 'once'"
+            v-if="!item.scoreBased && item.cycle === 'once'"
             v-model="item.month"
             size="small"
             class="income-item__month"
@@ -182,6 +215,14 @@ const annualTotal = computed(() => result.value.annual.gross)
               :value="option.value"
             />
           </el-select>
+          <el-checkbox
+            v-if="item.cycle === 'monthly'"
+            :model-value="item.scoreBased ?? false"
+            size="small"
+            @update:model-value="(value: boolean) => store.toggleScoreBased(item.id, value)"
+          >
+            按绩效分数计价
+          </el-checkbox>
           <el-checkbox v-model="item.intoInsuranceBase" size="small">计入缴费基数</el-checkbox>
           <el-checkbox v-model="item.taxable" size="small">并入综合所得</el-checkbox>
           <el-checkbox v-model="item.nonCash" size="small">非现金福利（不计入到手）</el-checkbox>
@@ -195,7 +236,7 @@ const annualTotal = computed(() => result.value.annual.gross)
           {{ OTHER_INCOME_HINTS[item.kind] }}
         </p>
 
-        <div class="income-item__stage">
+        <div v-if="!item.scoreBased" class="income-item__stage">
           <el-checkbox
             :model-value="item.staged"
             size="small"
@@ -213,7 +254,7 @@ const annualTotal = computed(() => result.value.annual.gross)
           </el-checkbox>
         </div>
 
-        <div v-if="item.staged" class="income-item__stage-amounts">
+        <div v-if="item.staged && !item.scoreBased" class="income-item__stage-amounts">
           <div v-for="type in STAGE_TYPES" :key="type" class="stage-cell">
             <el-checkbox
               :model-value="isStageOn(item, type)"
@@ -238,7 +279,7 @@ const annualTotal = computed(() => result.value.annual.gross)
           </div>
         </div>
 
-        <div v-if="item.variableByMonth" class="income-item__months">
+        <div v-if="item.variableByMonth && !item.scoreBased" class="income-item__months">
           <div v-for="month in 12" :key="month" class="month-cell">
             <span class="month-cell__label">{{ month }} 月</span>
             <MoneyInput
@@ -251,6 +292,32 @@ const annualTotal = computed(() => result.value.annual.gross)
           </div>
           <p class="income-item__tip">
             全年合计 ¥{{ formatMoney(monthlyAmountsSum(item)) }}，逐月金额优先于阶段金额
+          </p>
+        </div>
+
+        <div v-if="item.scoreBased" class="income-item__months">
+          <div v-for="month in 12" :key="month" class="month-cell">
+            <span class="month-cell__label">{{ month }} 月分数</span>
+            <el-input-number
+              :model-value="scoreOf(item, month)"
+              :min="0"
+              :max="999"
+              :step="1"
+              :precision="2"
+              size="small"
+              controls-position="right"
+              class="month-cell__score"
+              @update:model-value="
+                (value: number | undefined) =>
+                  store.updateMonthlyScore(item.id, month, Number(value) || 0)
+              "
+            />
+            <span class="month-cell__amount">≈ ¥{{ formatMoney(scoreAmountOf(item, month)) }}</span>
+          </div>
+          <p class="income-item__tip">
+            每分金额 ¥{{ formatMoney(item.perPointAmount ?? 0) }}，全年
+            {{ scoreAnnual(item).score }} 分 ≈ ¥{{ formatMoney(scoreAnnual(item).amount) }}；
+            金额 = 每月分数 × 每分金额
           </p>
         </div>
       </li>
@@ -352,6 +419,12 @@ const annualTotal = computed(() => result.value.annual.gross)
   width: 118px;
 }
 
+.income-item__unit {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
 .income-item__month {
   width: 88px;
 }
@@ -420,10 +493,25 @@ const annualTotal = computed(() => result.value.annual.gross)
   color: var(--el-text-color-secondary);
 }
 
+.month-cell__score {
+  width: 100%;
+}
+
+.month-cell__amount {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
+}
+
 .income-item__tip {
   margin: 0;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+/* 逐月网格中的汇总提示独占整行，避免被挤在最后一个月份格子里 */
+.income-item__months > .income-item__tip {
+  grid-column: 1 / -1;
 }
 
 .income-editor__actions {

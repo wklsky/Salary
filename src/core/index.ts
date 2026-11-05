@@ -115,6 +115,7 @@ function runEngine(
     taxpayerType: input.taxpayerType,
     taxReductionMonthly: input.taxReductionMonthly,
     monthOverrides: input.monthOverrides ?? {},
+    postTaxDeductions: input.postTaxDeductions ?? [],
   })
 }
 
@@ -246,6 +247,8 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
     otherIncome: chosen.otherIncome,
     insurancePersonal: chosen.insurancePersonal,
     insuranceCompany: chosen.insuranceCompany,
+    postTaxDeduction: chosen.postTaxDeduction,
+    totalDeduction: chosen.totalDeduction,
     companyCost: chosen.companyCost,
     taxableIncome: chosen.taxableIncome,
     tax: chosen.tax,
@@ -317,6 +320,7 @@ export {
 export {
   amountOfMonth,
   amountOfStage,
+  scoreOfMonth,
   stageTypeOfMonth,
   resolveStageOfMonth,
   isInsuranceSkipped,

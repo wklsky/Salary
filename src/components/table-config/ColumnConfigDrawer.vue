@@ -9,6 +9,8 @@ import Sortable from 'sortablejs'
 import { Delete, Plus, Rank } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { COLUMN_GROUP_LABELS } from '@/config/columns'
+import { useSalaryStore } from '@/stores/useSalaryStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import type { ColumnGroup, ColumnSchema } from '@/types'
 
@@ -30,6 +32,21 @@ const emit = defineEmits<{
 }>()
 
 const schemaStore = useTableSchemaStore()
+const salaryStore = useSalaryStore()
+const settingsStore = useSettingsStore()
+
+/** 可用于反推的工资项：逐月发放、计税、非现金、非计分制 */
+const reverseCandidates = computed(() =>
+  salaryStore.incomes.filter(
+    (item) =>
+      item.enabled &&
+      item.cycle === 'monthly' &&
+      item.kind === 'salary' &&
+      item.taxable &&
+      !item.nonCash &&
+      !item.scoreBased,
+  ),
+)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -188,6 +205,32 @@ function onCustomFlagChange(column: ColumnSchema, field: 'intoGross' | 'taxable'
             恢复默认
           </el-button>
         </div>
+      </section>
+
+      <section class="reverse-section">
+        <div class="preset-section__row">
+          <span class="section-title">反推调整项</span>
+          <el-select
+            v-model="settingsStore.reverseAdjustIncomeId"
+            size="small"
+            clearable
+            placeholder="自动选择"
+            class="preset-select"
+          >
+            <el-option
+              v-for="item in reverseCandidates"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </div>
+        <p class="reverse-hint">
+          在月度明细直接编辑「应发工资 / 实发工资 / 个税 ⇄」时，通过调整该项反推所需金额；留空则自动选择第一个逐月计税工资项。
+          <template v-if="reverseCandidates.length === 0">
+            当前没有可用的调整项，请先添加一个逐月发放、计税且非现金的工资项。
+          </template>
+        </p>
       </section>
 
       <div class="column-config__body">
@@ -350,6 +393,20 @@ function onCustomFlagChange(column: ColumnSchema, field: 'intoGross' | 'taxable'
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.reverse-section {
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+}
+
+.reverse-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 
 .column-config__body {

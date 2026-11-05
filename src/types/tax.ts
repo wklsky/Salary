@@ -58,6 +58,8 @@ export interface MonthlyResult {
   deductionTotal: number
   /** 当月各收入项金额，key 为 IncomeItem.id，用于动态列渲染 */
   incomeBreakdown: Record<string, number>
+  /** 当月各计分制收入项的分数，key 为 IncomeItem.id，用于绩效分数列渲染 */
+  incomeScores: Record<string, number>
   /** 用户自定义列的当月数值，key 为自定义列 key；未计入应发的列也在此展示 */
   customValues: Record<string, number>
   /** 累计应纳税所得额 */
@@ -74,6 +76,14 @@ export interface MonthlyResult {
   otherIncome: number
   /** 当月个税合计 */
   taxTotal: number
+  /** 当月税后扣款合计（如宿舍水电费、管理费），不影响计税与缴费基数 */
+  postTaxDeduction: number
+  /** 当月各税后扣款项目金额，key 为 PostTaxDeductionItem.id */
+  postTaxDeductionBreakdown: Record<string, number>
+  /** 当月总扣款 = 五险一金个人 + 个税合计 + 税后扣款 */
+  totalDeduction: number
+  /** 该月备注，来自单月调整 */
+  note: string
   /** 当月到手 */
   net: number
 }
@@ -90,6 +100,10 @@ export interface AnnualSummary {
   otherIncome: number
   insurancePersonal: number
   insuranceCompany: number
+  /** 全年税后扣款合计 */
+  postTaxDeduction: number
+  /** 全年总扣款 = 五险一金个人 + 个税 + 税后扣款 */
+  totalDeduction: number
   /** 单位用工总成本 = 应发 + 单位缴纳五险一金 */
   companyCost: number
   /** 全年应纳税所得额（预扣口径） */

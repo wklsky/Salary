@@ -47,6 +47,9 @@ function makeIncome(overrides: Partial<IncomeItem> = {}): IncomeItem {
     nonCash: overrides.nonCash ?? false,
     variableByMonth: overrides.variableByMonth ?? false,
     monthlyAmounts: overrides.monthlyAmounts,
+    scoreBased: overrides.scoreBased ?? false,
+    perPointAmount: overrides.perPointAmount,
+    monthlyScores: overrides.monthlyScores,
   }
 }
 
@@ -907,6 +910,120 @@ describe('非现金福利与逐月金额', () => {
     // 两者计税结果一致，差别只在到手
     expect(withMeal.annual.tax).toBe(cashOnly.annual.tax)
     expect(withMeal.annual.net).toBe(cashOnly.annual.net - 9600)
+  })
+
+  it('税后扣款只减少实发工资，不影响个税', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ id: 'salary', amount: 15000 })],
+        postTaxDeductions: [
+          {
+            id: 'utility',
+            name: '水电费',
+            enabled: true,
+            monthlyAmounts: [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          },
+          {
+            id: 'management',
+            name: '管理费',
+            enabled: true,
+            monthlyAmounts: [50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          },
+        ],
+      }),
+    )
+
+    // 个税仍按 15000 − 5000 计算，税后扣款不进入应纳税所得额
+    expect(result.monthly[0]?.tax).toBe(300)
+    expect(result.monthly[0]?.postTaxDeduction).toBe(150)
+    expect(result.monthly[0]?.postTaxDeductionBreakdown).toEqual({ utility: 100, management: 50 })
+    // 总扣款 = 五险一金 0 + 个税 300 + 税后扣款 150
+    expect(result.monthly[0]?.totalDeduction).toBe(450)
+    expect(result.monthly[0]?.net).toBe(14550)
+    expect(result.annual.postTaxDeduction).toBe(150)
+    expect(result.annual.totalDeduction).toBe(9630)
+    expect(result.annual.net).toBe(170370)
+  })
+
+  it('停用的税后扣款项不参与计算', () => {
+    const result = calculateSalary(
+      makeInput({
+        postTaxDeductions: [
+          {
+            id: 'utility',
+            name: '水电费',
+            enabled: false,
+            monthlyAmounts: Array<number>(12).fill(100),
+          },
+        ],
+      }),
+    )
+    expect(result.monthly[0]?.postTaxDeduction).toBe(0)
+    expect(result.annual.postTaxDeduction).toBe(0)
+  })
+
+  it('未在职月份不产生税后扣款，备注透传到月度结果', () => {
+    const result = calculateSalary(
+      makeInput({
+        startMonth: 3,
+        endMonth: 6,
+        postTaxDeductions: [
+          {
+            id: 'utility',
+            name: '水电费',
+            enabled: true,
+            monthlyAmounts: Array<number>(12).fill(100),
+          },
+        ],
+        monthOverrides: { 4: { note: '宿舍维修，扣款加倍' } },
+      }),
+    )
+    expect(result.monthly[0]?.postTaxDeduction).toBe(0)
+    expect(result.monthly[2]?.postTaxDeduction).toBe(100)
+    expect(result.monthly[3]?.note).toBe('宿舍维修，扣款加倍')
+    expect(result.monthly[2]?.note).toBe('')
+  })
+
+  it('计分制绩效按每月分数 × 每分金额计算', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({
+            id: 'performance',
+            name: '绩效',
+            amount: 0,
+            scoreBased: true,
+            perPointAmount: 20,
+            monthlyScores: [40, 40.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          }),
+        ],
+      }),
+    )
+    expect(result.monthly[0]?.gross).toBe(800)
+    expect(result.monthly[1]?.gross).toBe(810)
+    expect(result.monthly[0]?.incomeScores.performance).toBe(40)
+    expect(result.monthly[1]?.incomeScores.performance).toBe(40.5)
+  })
+
+  it('未勾选计入总扣款的税后扣款项只展示，不减少实发工资', () => {
+    const result = calculateSalary(
+      makeInput({
+        postTaxDeductions: [
+          {
+            id: 'displayOnly',
+            name: '仅展示项',
+            enabled: true,
+            intoTotalDeduction: false,
+            monthlyAmounts: Array<number>(12).fill(100),
+          },
+        ],
+      }),
+    )
+    // 明细列仍能取到金额，但税后扣款合计与到手不受影响
+    expect(result.monthly[0]?.postTaxDeductionBreakdown.displayOnly).toBe(100)
+    expect(result.monthly[0]?.postTaxDeduction).toBe(0)
+    expect(result.monthly[0]?.net).toBe(14700)
+    expect(result.annual.postTaxDeduction).toBe(0)
   })
 
   it('每月金额不同时按逐月金额发放', () => {

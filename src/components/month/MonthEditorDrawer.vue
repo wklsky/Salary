@@ -7,7 +7,7 @@
 import { computed } from 'vue'
 import { RefreshLeft } from '@element-plus/icons-vue'
 import { STAGE_LABELS } from '@/config/stages'
-import { amountOfMonth, stageTypeOfMonth } from '@/core'
+import { amountOfMonth, round2, stageTypeOfMonth } from '@/core'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
@@ -88,6 +88,15 @@ function onRestore(item: IncomeItem) {
   store.setMonthAmount(month.value, item.id, undefined)
 }
 
+/** 计分制收入项的本月分数与折算金额 */
+function scoreOf(item: IncomeItem): number {
+  return item.monthlyScores?.[month.value - 1] ?? 0
+}
+
+function scoreAmountOf(item: IncomeItem): number {
+  return round2(scoreOf(item) * (item.perPointAmount ?? 0))
+}
+
 /** 自定义列的本月值直接写在列定义上，与收入项的覆盖机制区分 */
 function customValueOf(key: string): number {
   const column = schemaStore.customColumns.find((item) => item.key === key)
@@ -108,6 +117,15 @@ function onBaseChange(value: number | undefined) {
   store.setMonthInsuranceBase(month.value, value)
 }
 
+const housingFundBase = computed(() => ({
+  auto: insurance.value?.housingFundBase ?? 0,
+  value: override.value?.housingFundBase,
+}))
+
+function onHousingFundBaseChange(value: number | undefined) {
+  store.setMonthHousingFundBase(month.value, value)
+}
+
 const summary = computed(() => {
   const item = monthResult.value
   if (!item) return []
@@ -115,6 +133,8 @@ const summary = computed(() => {
     { label: '应发合计', value: item.gross },
     { label: '五险一金（个人）', value: item.insurancePersonal },
     { label: '个人所得税', value: item.taxTotal },
+    { label: '税后扣款', value: item.postTaxDeduction },
+    { label: '总扣款', value: item.totalDeduction },
     { label: '本月到手', value: item.net, accent: true },
   ]
 })
@@ -125,7 +145,8 @@ const adjustmentCount = computed(() => {
   if (!current) return 0
   return (
     Object.keys(current.amounts ?? {}).length +
-    (typeof current.insuranceBase === 'number' ? 1 : 0)
+    (typeof current.insuranceBase === 'number' ? 1 : 0) +
+    (typeof current.housingFundBase === 'number' ? 1 : 0)
   )
 })
 
@@ -170,22 +191,42 @@ function onResetMonth() {
                 已单独设置
               </el-tag>
             </span>
-            <MoneyInput
-              :model-value="amountOf(item)"
-              size="small"
-              class="item-row__input"
-              @update:model-value="(value: number) => onAmountChange(item, value)"
-            />
-            <span class="item-row__auto">自动 ¥{{ formatMoney(autoAmountOf(item)) }}</span>
-            <el-button
-              size="small"
-              text
-              :icon="RefreshLeft"
-              :disabled="!isOverridden(item)"
-              @click="onRestore(item)"
-            >
-              还原
-            </el-button>
+            <template v-if="item.scoreBased">
+              <el-input-number
+                :model-value="scoreOf(item)"
+                :min="0"
+                :max="999"
+                :step="1"
+                :precision="2"
+                size="small"
+                controls-position="right"
+                class="item-row__input"
+                @update:model-value="
+                  (value: number | undefined) =>
+                    store.updateMonthlyScore(item.id, month, Number(value) || 0)
+                "
+              />
+              <span class="item-row__auto">≈ ¥{{ formatMoney(scoreAmountOf(item)) }}</span>
+              <span class="item-row__auto">每分 ¥{{ formatMoney(item.perPointAmount ?? 0) }}</span>
+            </template>
+            <template v-else>
+              <MoneyInput
+                :model-value="amountOf(item)"
+                size="small"
+                class="item-row__input"
+                @update:model-value="(value: number) => onAmountChange(item, value)"
+              />
+              <span class="item-row__auto">自动 ¥{{ formatMoney(autoAmountOf(item)) }}</span>
+              <el-button
+                size="small"
+                text
+                :icon="RefreshLeft"
+                :disabled="!isOverridden(item)"
+                @click="onRestore(item)"
+              >
+                还原
+              </el-button>
+            </template>
           </li>
         </ul>
         <el-empty
@@ -193,6 +234,42 @@ function onResetMonth() {
           description="本月没有可编辑的收入项"
           :image-size="60"
         />
+      </section>
+
+      <section class="month-editor__block">
+        <h4 class="block-title">税后扣款</h4>
+        <ul v-if="store.postTaxDeductions.length > 0" class="item-list">
+          <li v-for="item in store.postTaxDeductions" :key="item.id" class="item-row">
+            <span class="item-row__name">
+              {{ item.name }}
+              <el-tag v-if="!item.enabled" size="small" type="info" effect="plain">已停用</el-tag>
+              <el-tag
+                v-if="item.enabled && item.intoTotalDeduction === false"
+                size="small"
+                type="warning"
+                effect="plain"
+              >
+                仅展示
+              </el-tag>
+            </span>
+            <MoneyInput
+              :model-value="item.monthlyAmounts[month - 1] ?? 0"
+              size="small"
+              class="item-row__input"
+              :disabled="!item.enabled"
+              @update:model-value="
+                (value: number) => store.setPostTaxMonthlyAmount(item.id, month, value)
+              "
+            />
+            <span class="item-row__auto">不改计税与缴费基数</span>
+          </li>
+        </ul>
+        <span v-else class="month-editor__hint">
+          暂无税后扣款项，可在「录入设置 → 税后扣款」中新增
+        </span>
+        <p class="month-editor__hint">
+          本月税后扣款合计 ¥{{ formatMoney(monthResult?.postTaxDeduction ?? 0) }}
+        </p>
       </section>
 
       <section v-if="schemaStore.customColumns.length > 0" class="month-editor__block">
@@ -244,6 +321,32 @@ function onResetMonth() {
             还原
           </el-button>
         </div>
+        <div class="base-row">
+          <span class="item-row__name">公积金缴费基数</span>
+          <!-- 社保基数与公积金基数可分别核定，用于「社保基数上调、公积金不变」的场景 -->
+          <el-input-number
+            :model-value="housingFundBase.value"
+            :min="0"
+            :max="99999999"
+            :step="100"
+            :precision="2"
+            size="small"
+            controls-position="right"
+            placeholder="按规则自动解析"
+            class="item-row__input"
+            @update:model-value="onHousingFundBaseChange"
+          />
+          <span class="item-row__auto">自动 ¥{{ formatMoney(housingFundBase.auto) }}</span>
+          <el-button
+            size="small"
+            text
+            :icon="RefreshLeft"
+            :disabled="housingFundBase.value === undefined"
+            @click="onHousingFundBaseChange(undefined)"
+          >
+            还原
+          </el-button>
+        </div>
       </section>
 
       <section class="month-editor__block">
@@ -289,7 +392,7 @@ function onResetMonth() {
 
 .month-editor__summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 8px;
 }
 

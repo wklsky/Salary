@@ -43,7 +43,7 @@ describe('应用挂载冒烟', () => {
     const text = wrapper.text()
     expect(text).toContain('单位用工成本')
     expect(text).toContain('年度汇总')
-    expect(text).toContain('点击任意月份可单独调整该月数据')
+    expect(text).toContain('可直接编辑')
     expect(text).not.toContain('NaN')
   })
 
@@ -56,7 +56,7 @@ describe('应用挂载冒烟', () => {
     const labels = schemaStore.visibleColumns.map((column) => column.label)
 
     expect(labels).toContain('月份')
-    expect(labels).toContain('到手工资')
+    expect(labels).toContain('实发工资')
     expect(labels).toContain('专项附加扣除')
     // 默认 4 个收入项（基本工资/绩效工资/交通餐补/年终奖）应各自派生一列
     expect(schemaStore.visibleColumns.filter((column) => column.dynamic)).toHaveLength(4)

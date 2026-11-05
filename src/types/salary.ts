@@ -30,8 +30,24 @@ export interface MonthOverride {
   amounts?: Record<string, number>
   /** 该月社保缴费基数单独核定值 */
   insuranceBase?: number
+  /** 该月公积金缴费基数单独核定值；缺省时按公积金基数口径解析 */
+  housingFundBase?: number
   /** 该月备注 */
   note?: string
+}
+
+/**
+ * 税后扣款项目（如宿舍水电费、管理费）
+ * 在个税与五险一金之后从实发工资中扣除，不影响应纳税所得额与缴费基数
+ */
+export interface PostTaxDeductionItem {
+  id: string
+  name: string
+  enabled: boolean
+  /** 逐月金额，长度 12，下标 0-11 对应 1-12 月 */
+  monthlyAmounts: number[]
+  /** 是否计入总扣款；关闭后该列仅展示，不减少实发工资 */
+  intoTotalDeduction?: boolean
 }
 
 /**
@@ -72,6 +88,8 @@ export interface SalaryInput {
   monthOverrides?: Record<number, MonthOverride>
   /** 用户自定义表格列，会转换为虚拟收入项参与计算 */
   customColumns?: CustomColumnItem[]
+  /** 税后扣款项目，只减少实发工资，不影响计税与缴费基数 */
+  postTaxDeductions?: PostTaxDeductionItem[]
 }
 
 /** 年终奖两种口径的税负对比 */

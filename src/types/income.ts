@@ -48,4 +48,13 @@ export interface IncomeItem {
   variableByMonth: boolean
   /** 逐月金额表，长度 12，下标 0-11 对应 1-12 月；缺省月份回落到阶段/通用金额 */
   monthlyAmounts?: number[]
+  /**
+   * 是否按绩效分数计价：当月金额 = 当月分数 × 每分金额
+   * 开启后忽略 amount / staged / variableByMonth 的金额口径，仅保留阶段是否发放的判断
+   */
+  scoreBased?: boolean
+  /** 每分金额（元/分），用户可自定义，如 20 表示 1 分 = 20 元 */
+  perPointAmount?: number
+  /** 逐月分数表，长度 12，下标 0-11 对应 1-12 月 */
+  monthlyScores?: number[]
 }

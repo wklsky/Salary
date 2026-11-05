@@ -3,7 +3,12 @@
  * @FilePath: src/utils/columnValue.ts
  * @Description: 表格列取值解析：把列 key 映射到月度明细行的数据
  */
-import { INSURANCE_COLUMN_PREFIX, INSURANCE_COMPANY_COLUMN_PREFIX } from '@/config/columns'
+import {
+  INSURANCE_COLUMN_PREFIX,
+  INSURANCE_COMPANY_COLUMN_PREFIX,
+  POST_TAX_COLUMN_PREFIX,
+  SCORE_COLUMN_PREFIX,
+} from '@/config/columns'
 import { STAGE_LABELS } from '@/config/stages'
 import type { ColumnSchema, InsuranceMonthDetail, InsuranceType, MonthlyResult } from '@/types'
 import { safeDivide } from '@/core'
@@ -36,9 +41,26 @@ export function resolveColumnValue(
     return insurance?.personal[type] ?? 0
   }
 
+  // 税后扣款项目列，key 为 posttax_ + 项目 id
+  if (key.startsWith(POST_TAX_COLUMN_PREFIX)) {
+    const id = key.slice(POST_TAX_COLUMN_PREFIX.length)
+    return row.postTaxDeductionBreakdown?.[id] ?? 0
+  }
+
+  // 计分制收入项的分数列，key 为 score_ + 收入项 id
+  if (key.startsWith(SCORE_COLUMN_PREFIX)) {
+    const id = key.slice(SCORE_COLUMN_PREFIX.length)
+    return row.incomeScores?.[id] ?? 0
+  }
+
   switch (key) {
     case 'gross':
       return row.gross
+    case 'cashGross':
+      // 现金应发：应发合计剔除饭票等非现金福利，与实发工资的扣减基数一致
+      return (row.gross ?? 0) - (row.nonCashIncome ?? 0)
+    case 'note':
+      return row.note ?? ''
     case 'comprehensiveIncome':
       return row.comprehensiveIncome
     case 'taxFreeIncome':
@@ -69,6 +91,10 @@ export function resolveColumnValue(
       return row.bonusTax
     case 'taxTotal':
       return row.taxTotal
+    case 'postTaxDeduction':
+      return row.postTaxDeduction ?? 0
+    case 'totalDeduction':
+      return row.totalDeduction ?? 0
     case 'companyCost':
       return row.gross + row.insuranceCompany
     case 'net':
@@ -96,6 +122,8 @@ export function formatColumnValue(
       return `${(value * 100).toFixed(1)}%`
     case 'money':
       return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    case 'number':
+      return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
     default:
       return String(value)
   }

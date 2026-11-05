@@ -5,7 +5,11 @@
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { createStaticColumns } from '@/config/columns'
+import {
+  createStaticColumns,
+  POST_TAX_COLUMN_PREFIX,
+  SCORE_COLUMN_PREFIX,
+} from '@/config/columns'
 import { COLUMN_PRESETS, DEFAULT_PRESET_ID } from '@/config/presets'
 import { createId } from '@/utils/id'
 import type {
@@ -15,6 +19,7 @@ import type {
   CustomColumnDef,
   CustomColumnItem,
   IncomeItem,
+  PostTaxDeductionItem,
 } from '@/types'
 
 /** 动态收入列的起始排序值，落在静态收入列区间内 */
@@ -98,6 +103,110 @@ export const useTableSchemaStore = defineStore(
           width: 120,
           formatter: 'money',
           dynamic: true,
+        })
+      })
+    }
+
+    /**
+     * 用最新内置预设覆盖 localStorage 中的旧版内置预设
+     * 内置预设会随版本新增字段（如动态收入列插入位置），不能沿用旧存档；用户自建预设原样保留
+     */
+    function syncBuiltinPresets() {
+      const builtinIds = new Set(COLUMN_PRESETS.map((preset) => preset.id))
+      const customPresets = presets.value.filter((preset) => !builtinIds.has(preset.id))
+      presets.value = [
+        ...(JSON.parse(JSON.stringify(COLUMN_PRESETS)) as ColumnPreset[]),
+        ...customPresets,
+      ]
+    }
+
+    /**
+     * 合并版本升级后新增的静态列
+     * localStorage 里保存的是旧版列注册表，缺少新列时按注册表默认值补入，保留用户已有排序与显隐
+     */
+    function syncStaticColumns() {
+      const registry = createStaticColumns()
+      const registryByKey = new Map(registry.map((column) => [column.key, column]))
+
+      // 同步静态列的默认表头（用户手动重命名过的保留），并补入旧存档缺少的新列
+      columns.value = columns.value.map((column) => {
+        if (column.dynamic || column.custom) return column
+        const definition = registryByKey.get(column.key)
+        if (!definition || column.customLabel) return column
+        return { ...column, label: definition.label }
+      })
+
+      const existing = new Set(columns.value.map((column) => column.key))
+      const missing = registry.filter((column) => !existing.has(column.key))
+      if (missing.length > 0) columns.value = [...columns.value, ...missing]
+    }
+
+    /**
+     * 依据税后扣款项目同步列
+     * 每个扣款项派生一列（posttax_ + id），删除项目时清理对应列
+     */
+    function syncPostTaxColumns(items: PostTaxDeductionItem[]) {
+      const validKeys = new Set(items.map((item) => `${POST_TAX_COLUMN_PREFIX}${item.id}`))
+      const next = columns.value.filter(
+        (column) =>
+          !column.key.startsWith(POST_TAX_COLUMN_PREFIX) || validKeys.has(column.key),
+      )
+      if (next.length !== columns.value.length) columns.value = next
+
+      items.forEach((item, index) => {
+        const key = `${POST_TAX_COLUMN_PREFIX}${item.id}`
+        const existing = columns.value.find((column) => column.key === key)
+        if (existing) {
+          // 用户重命名过的列不再被项目名称覆盖
+          if (!existing.customLabel) existing.label = item.name
+          return
+        }
+        columns.value.push({
+          key,
+          label: item.name,
+          group: 'deduction',
+          // 新增扣款项默认展示，便于核对每月扣款
+          visible: true,
+          order: 305 + index,
+          width: 110,
+          formatter: 'money',
+          dynamic: false,
+        })
+      })
+    }
+
+    /**
+     * 依据计分制收入项同步分数列
+     * 每个计分项派生一列 score_ + id，编辑分数与金额可双向联动
+     */
+    function syncScoreColumns(incomes: IncomeItem[]) {
+      const scoreItems = incomes.filter((item) => item.enabled && item.scoreBased)
+      const validKeys = new Set(scoreItems.map((item) => `${SCORE_COLUMN_PREFIX}${item.id}`))
+      const next = columns.value.filter(
+        (column) =>
+          !column.key.startsWith(SCORE_COLUMN_PREFIX) || validKeys.has(column.key),
+      )
+      if (next.length !== columns.value.length) columns.value = next
+
+      scoreItems.forEach((item) => {
+        const key = `${SCORE_COLUMN_PREFIX}${item.id}`
+        const existing = columns.value.find((column) => column.key === key)
+        if (existing) {
+          // 用户重命名过的列不再被收入项名称覆盖
+          if (!existing.customLabel) existing.label = `${item.name}(分)`
+          return
+        }
+        // 分数列紧挨对应金额列，排在金额列之后
+        const amountColumn = columns.value.find((column) => column.key === item.id)
+        columns.value.push({
+          key,
+          label: `${item.name}(分)`,
+          group: 'income',
+          visible: true,
+          order: amountColumn ? amountColumn.order + 0.001 : DYNAMIC_COLUMN_ORDER_BASE + 50,
+          width: 100,
+          formatter: 'number',
+          dynamic: false,
         })
       })
     }
@@ -188,22 +297,55 @@ export const useTableSchemaStore = defineStore(
       if (!preset) return
       const visibleSet = new Set(preset.visibleKeys)
       columns.value.forEach((column) => {
-        column.visible = column.dynamic ? preset.includeIncomeColumns : visibleSet.has(column.key)
+        // 动态收入列与计分制的分数列都随 includeIncomeColumns 一起显隐
+        const incomeLike =
+          column.dynamic || column.key.startsWith(SCORE_COLUMN_PREFIX)
+        column.visible = incomeLike ? preset.includeIncomeColumns : visibleSet.has(column.key)
       })
-      // 预设中键的顺序即展示顺序，未列出的列保持原序排在后面
+      // 预设中键的顺序即展示顺序，未列出的静态列保持原序排在后面
       const presetOrders = new Map(preset.visibleKeys.map((key, index) => [key, index]))
+      columns.value
+        .filter((column) => !column.dynamic && presetOrders.has(column.key))
+        .forEach((column) => {
+          column.order = presetOrders.get(column.key) ?? column.order
+        })
+
       let tail = preset.visibleKeys.length
       const rest = columns.value
-        .filter((column) => !presetOrders.has(column.key))
+        .filter(
+          (column) =>
+            !column.dynamic &&
+            !column.key.startsWith(SCORE_COLUMN_PREFIX) &&
+            !presetOrders.has(column.key),
+        )
         .sort((a, b) => a.order - b.order)
-      columns.value.forEach((column) => {
-        const order = presetOrders.get(column.key)
-        column.order = order ?? tail
-      })
       rest.forEach((column) => {
         column.order = tail
         tail += 1
       })
+
+      // 动态收入列按锚点插入，如「工资表」预设要求绩效、饭票紧跟应发工资
+      const anchorOrder =
+        preset.incomeColumnAfter !== undefined
+          ? presetOrders.get(preset.incomeColumnAfter)
+          : undefined
+      const dynamicBase = anchorOrder !== undefined ? anchorOrder + 0.5 : tail
+      columns.value
+        .filter((column) => column.dynamic)
+        .sort((a, b) => a.order - b.order)
+        .forEach((column, index) => {
+          column.order = dynamicBase + index / 100
+        })
+
+      // 计分制分数列贴在对应金额列之后
+      columns.value
+        .filter((column) => column.key.startsWith(SCORE_COLUMN_PREFIX))
+        .forEach((column) => {
+          const itemId = column.key.slice(SCORE_COLUMN_PREFIX.length)
+          const amountColumn = columns.value.find((item) => item.key === itemId)
+          if (amountColumn) column.order = amountColumn.order + 0.001
+        })
+
       activePresetId.value = id
     }
 
@@ -212,8 +354,15 @@ export const useTableSchemaStore = defineStore(
         id: createId('preset'),
         name,
         builtin: false,
-        visibleKeys: visibleColumns.value.filter((column) => !column.dynamic).map((column) => column.key),
-        includeIncomeColumns: visibleColumns.value.some((column) => column.dynamic),
+        visibleKeys: visibleColumns.value
+          .filter(
+            (column) =>
+              !column.dynamic && !column.key.startsWith(SCORE_COLUMN_PREFIX),
+          )
+          .map((column) => column.key),
+        includeIncomeColumns: visibleColumns.value.some(
+          (column) => column.dynamic || column.key.startsWith(SCORE_COLUMN_PREFIX),
+        ),
       }
       presets.value.push(preset)
       activePresetId.value = preset.id
@@ -305,6 +454,10 @@ export const useTableSchemaStore = defineStore(
       customColumns,
       customColumnItems,
       syncDynamicColumns,
+      syncStaticColumns,
+      syncBuiltinPresets,
+      syncPostTaxColumns,
+      syncScoreColumns,
       addCustomColumn,
       removeCustomColumn,
       updateCustomColumn,

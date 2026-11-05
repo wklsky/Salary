@@ -86,10 +86,12 @@ function onExportCsv() {
       <template #header>
         <div class="table-view__card-head">
           <span class="table-view__card-title">逐月发放与扣缴</span>
-          <span class="table-view__card-hint">点击任意月份，可单独调整该月的收入项与缴费基数</span>
+          <span class="table-view__card-hint">
+            点击月份单元格打开单月编辑；表格中的金额、分数、备注可直接编辑并自动联动
+          </span>
         </div>
       </template>
-      <MonthlyTable @row-click="onRowClick" />
+      <MonthlyTable @row-click="onRowClick" @config-columns="emit('config-columns')" />
     </el-card>
 
     <el-card shadow="never">
@@ -182,5 +184,26 @@ function onExportCsv() {
   padding: 40px;
   text-align: center;
   color: var(--el-text-color-secondary);
+}
+
+@media (max-width: 640px) {
+  /* 窄屏下标题独占一行，避免被操作按钮挤压成竖排文字 */
+  .table-view__head {
+    gap: 8px 10px;
+    align-items: flex-start;
+  }
+
+  .table-view__titles {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .table-view__title {
+    white-space: nowrap;
+  }
+
+  .table-view__actions {
+    margin-left: auto;
+  }
 }
 </style>

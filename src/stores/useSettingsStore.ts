@@ -25,6 +25,8 @@ interface SettingsPayload {
   bonusMode: BonusMode
   taxpayerType: TaxpayerType
   taxReductionMonthly: number
+  /** 表格内反推应发/实发/个税时用于调整的工资项 id；空字符串表示自动选择 */
+  reverseAdjustIncomeId: string
 }
 
 export const useSettingsStore = defineStore(
@@ -76,6 +78,8 @@ export const useSettingsStore = defineStore(
     const taxpayerType = ref<TaxpayerType>('resident')
     /** 每月减免税额，如残疾、孤老、烈属等减征政策，无则填 0 */
     const taxReductionMonthly = ref<number>(0)
+    /** 反推调整项：表格内修改应发/实发/个税时，通过调整该工资项达到目标 */
+    const reverseAdjustIncomeId = ref<string>('')
 
     function updateSettings(payload: Partial<SettingsPayload>) {
       if (payload.year !== undefined) year.value = payload.year
@@ -91,6 +95,9 @@ export const useSettingsStore = defineStore(
       if (payload.taxReductionMonthly !== undefined) {
         taxReductionMonthly.value = payload.taxReductionMonthly
       }
+      if (payload.reverseAdjustIncomeId !== undefined) {
+        reverseAdjustIncomeId.value = payload.reverseAdjustIncomeId
+      }
       // 保证在职区间合法，避免离职月早于入职月导致零收入
       if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
       // 起始月变化后月数可能溢出年末，收回到年末为止
@@ -105,6 +112,7 @@ export const useSettingsStore = defineStore(
       if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
       if (!taxpayerType.value) taxpayerType.value = 'resident'
       if (typeof taxReductionMonthly.value !== 'number') taxReductionMonthly.value = 0
+      if (typeof reverseAdjustIncomeId.value !== 'string') reverseAdjustIncomeId.value = ''
     }
 
     return {
@@ -117,6 +125,7 @@ export const useSettingsStore = defineStore(
       bonusMode,
       taxpayerType,
       taxReductionMonthly,
+      reverseAdjustIncomeId,
       updateSettings,
       normalize,
     }

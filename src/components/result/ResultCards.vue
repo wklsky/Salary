@@ -36,6 +36,12 @@ const segments = computed(() => {
     },
     { key: 'tax', label: '个税', value: annual.value.tax, ratio: annual.value.tax / gross },
     {
+      key: 'postTax',
+      label: '税后扣款',
+      value: annual.value.postTaxDeduction,
+      ratio: annual.value.postTaxDeduction / gross,
+    },
+    {
       key: 'nonCash',
       label: '非现金福利',
       value: annual.value.nonCashIncome,
@@ -255,6 +261,11 @@ const settlementText = computed(() => {
 .summary-hero__bar-seg.is-tax,
 .summary-hero__dot.is-tax {
   background: #e9a23b;
+}
+
+.summary-hero__bar-seg.is-postTax,
+.summary-hero__dot.is-postTax {
+  background: #c86b8a;
 }
 
 .summary-hero__bar-seg.is-nonCash,
