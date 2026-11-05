@@ -27,7 +27,8 @@ const schemaStore = useTableSchemaStore()
 const salaryStore = useSalaryStore()
 const settingsStore = useSettingsStore()
 const { applyCellValue, findAdjustIncome } = useTableEditing()
-const { height: windowHeight } = useWindowSize()
+const { height: windowHeight, width: windowWidth } = useWindowSize()
+const isNarrow = computed(() => windowWidth.value <= 960)
 
 /** 默认只展示计算区间内的月份，避免 1-7 月全 0 的行占满表格 */
 const showAllMonths = ref(false)
@@ -39,8 +40,9 @@ const adjustIncomeName = computed(() => findAdjustIncome()?.name ?? '未配置')
 const tableMaxHeight = computed(() => Math.max(300, Math.min(640, windowHeight.value - 520)))
 
 function fixedOf(column: ColumnSchema): 'left' | 'right' | undefined {
+  // 窄屏固定列会挤占可视区域，只保留月份固定；宽屏再把实发工资固定在右侧
   if (column.key === 'month') return 'left'
-  if (column.key === 'net') return 'right'
+  if (column.key === 'net' && !isNarrow.value) return 'right'
   return undefined
 }
 

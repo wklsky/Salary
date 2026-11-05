@@ -6,6 +6,7 @@
  */
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { ArrowLeft, Download, Setting } from '@element-plus/icons-vue'
+import PagePager from '@/components/common/PagePager.vue'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import BonusAdvice from '@/components/result/BonusAdvice.vue'
 import MonthlyTable from '@/components/result/MonthlyTable.vue'
@@ -179,19 +180,15 @@ function goToSection(item: NavItem | undefined) {
       </el-card>
     </section>
 
-    <div class="table-view__pager">
-      <span class="table-view__pager-progress">{{ pageProgress }}</span>
-      <el-button v-if="prevSection" size="small" @click="goToSection(prevSection)">
-        ← {{ prevSection.label }}
-      </el-button>
-      <span class="table-view__pager-spacer" />
-      <el-button v-if="nextSection" size="small" @click="goToSection(nextSection)">
-        {{ nextSection.label }} →
-      </el-button>
-      <el-button v-else size="small" type="primary" @click="emit('back')">
-        返回录入设置
-      </el-button>
-    </div>
+    <PagePager
+      :progress="pageProgress"
+      :prev-label="prevSection?.label"
+      :next-label="nextSection?.label"
+      last-label="返回录入设置"
+      @prev="goToSection(prevSection)"
+      @next="goToSection(nextSection)"
+      @last="emit('back')"
+    />
 
     <MonthEditorDrawer v-model="editorVisible" :month="editingMonth" />
   </section>
@@ -209,26 +206,6 @@ function goToSection(item: NavItem | undefined) {
 
 .table-view__section {
   animation: table-page-in 0.18s ease;
-}
-
-/* 与录入设置一致的账本式分页页脚 */
-.table-view__pager {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 2px 6px;
-  border-top: 1px dashed var(--app-line-strong);
-}
-
-.table-view__pager-progress {
-  color: var(--app-ink-500);
-  font-family: var(--app-font-ledger);
-  font-size: 11.5px;
-  letter-spacing: 0.1em;
-}
-
-.table-view__pager-spacer {
-  flex: 1;
 }
 
 @keyframes table-page-in {

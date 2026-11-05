@@ -11,6 +11,7 @@ import { useWindowSize } from '@vueuse/core'
 import AdminSidebar from '@/components/layout/AdminSidebar.vue'
 import SetupView from '@/components/layout/SetupView.vue'
 import TableView from '@/components/layout/TableView.vue'
+import ViewTabs from '@/components/layout/ViewTabs.vue'
 import ColumnConfigDrawer from '@/components/table-config/ColumnConfigDrawer.vue'
 import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import { useExport } from '@/composables/useExport'
@@ -350,15 +351,13 @@ function onCommand(command: string) {
             </el-icon>
           </button>
 
-          <nav class="app__breadcrumb" aria-label="面包屑">
-            <span class="app__crumb">薪资计算器</span>
-            <span class="app__crumb-sep">/</span>
-            <span class="app__crumb">{{ viewLabel }}</span>
-            <template v-if="activeSectionLabel">
-              <span class="app__crumb-sep">/</span>
-              <span class="app__crumb app__crumb--current">{{ activeSectionLabel }}</span>
-            </template>
-          </nav>
+          <el-breadcrumb separator="/" class="app__breadcrumb">
+            <el-breadcrumb-item>薪资计算器</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ viewLabel }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="activeSectionLabel">
+              {{ activeSectionLabel }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
 
           <el-tooltip
             :content="`年终奖单独计税有效期至 ${BONUS_SEPARATE_VALID_UNTIL}`"
@@ -416,21 +415,7 @@ function onCommand(command: string) {
       </header>
 
       <div class="app__tags">
-        <div class="app__tag-list" role="tablist" aria-label="视图切换">
-          <button
-            v-for="tab in viewTabs"
-            :key="tab.value"
-            type="button"
-            role="tab"
-            class="app__tag"
-            :class="{ 'is-active': view === tab.value }"
-            :aria-selected="view === tab.value"
-            @click="onSelectView(tab.value)"
-          >
-            <i class="app__tag-dot" aria-hidden="true"></i>
-            {{ tab.label }}
-          </button>
-        </div>
+        <ViewTabs :model-value="view" :items="viewTabs" @update:model-value="onSelectView" />
         <span v-if="activeSectionLabel" class="app__tags-hint">
           当前板块：{{ activeSectionLabel }}
         </span>
@@ -559,28 +544,28 @@ function onCommand(command: string) {
 }
 
 .app__breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
   overflow: hidden;
-  color: var(--app-ink-500);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.app__crumb {
+.app__breadcrumb :deep(.el-breadcrumb__separator) {
+  margin: 0 6px;
+  color: var(--app-line-strong);
+  font-weight: 400;
+}
+
+.app__breadcrumb :deep(.el-breadcrumb__inner) {
   overflow: hidden;
+  color: var(--app-ink-500);
+  font-weight: 400;
   text-overflow: ellipsis;
 }
 
-.app__crumb--current {
+.app__breadcrumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
   color: var(--app-ink-900);
   font-weight: 600;
-}
-
-.app__crumb-sep {
-  color: var(--app-line-strong);
 }
 
 .app__policy {
@@ -636,56 +621,9 @@ function onCommand(command: string) {
   border-bottom: 1px solid var(--app-line);
 }
 
-.app__tag-list {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.app__tag-list::-webkit-scrollbar {
-  display: none;
-}
-
-.app__tag {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--app-line);
-  border-radius: 3px;
-  background: #fff;
-  color: var(--app-ink-500);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    color 0.15s,
-    background 0.15s;
-}
-
-.app__tag:hover {
-  border-color: var(--app-ink-300);
-  color: var(--app-ink-900);
-}
-
-.app__tag.is-active {
-  border-color: var(--app-jade-600);
-  background: var(--app-jade-100);
-  color: var(--app-jade-700);
-  font-weight: 600;
-}
-
-.app__tag-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.75;
+.app__tags :deep(.el-tabs) {
+  flex: 1;
+  min-width: 0;
 }
 
 .app__tags-hint {
