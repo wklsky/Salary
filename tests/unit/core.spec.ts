@@ -14,11 +14,14 @@ import {
   otherIncomeAmount,
   otherIncomeTax,
   otherIncomeTaxable,
+  resolveCity,
+  reverseMonthlyNet,
   skippedInsuranceTypesOfMonth,
 } from '@/core'
 import { createDefaultStages, validateStages } from '@/config/stages'
 import { DEDUCTION_KEYS } from '@/types'
 import type {
+  CityPolicy,
   DeductionKey,
   DeductionStateMap,
   IncomeItem,
@@ -312,6 +315,78 @@ describe('雇佣阶段', () => {
     expect(result.monthly[5]?.gross).toBe(15000)
   })
 
+  it('次月发放不改变明细的工资归属月', () => {
+    const same = calculateSalary(makeInput({ incomes: [stagedIncome], stages }))
+    const next = calculateSalary(
+      makeInput({ incomes: [stagedIncome], stages, payTiming: 'next' }),
+    )
+    // 明细按工资所属月展示：1 月实习、4-5 月试用、6 月起转正，发放时间不改变归属
+    expect(next.monthly[0]?.gross).toBe(8000)
+    expect(next.monthly[3]?.gross).toBe(12000)
+    expect(next.monthly[4]?.gross).toBe(12000)
+    expect(next.monthly[5]?.gross).toBe(15000)
+    expect(next.monthly.map((item) => item.gross)).toEqual(
+      same.monthly.map((item) => item.gross),
+    )
+  })
+
+  it('入职首月靠后时，明细按所属月的阶段取金额', () => {
+    const result = calculateSalary(
+      makeInput({
+        startMonth: 8,
+        endMonth: 12,
+        incomes: [stagedIncome],
+        stages: [makeStage('probation', 8, 10), makeStage('regular', 11, 12)],
+        payTiming: 'next',
+      }),
+    )
+    // 8-10 月试用期，11 月起转正后
+    expect(result.monthly[7]?.stage).toBe('probation')
+    expect(result.monthly[7]?.gross).toBe(12000)
+    expect(result.monthly[9]?.gross).toBe(12000)
+    expect(result.monthly[10]?.stage).toBe('regular')
+    expect(result.monthly[10]?.gross).toBe(15000)
+    expect(result.monthly[11]?.gross).toBe(15000)
+  })
+
+  it('一次性收入计入归属月，不随发放时间顺延', () => {
+    const bonus = makeIncome({
+      id: 'bonus_1',
+      name: '年终奖',
+      amount: 30000,
+      kind: 'bonus',
+      cycle: 'once',
+      month: 8,
+    })
+    const result = calculateSalary(
+      makeInput({
+        startMonth: 8,
+        endMonth: 12,
+        incomes: [makeIncome({ amount: 15000 }), bonus],
+        stages: [makeStage('regular', 8, 12)],
+        payTiming: 'next',
+      }),
+    )
+    // 奖金归属 8 月，只在 8 月明细出现一次
+    expect(result.monthly[7]?.gross).toBe(45000)
+    expect(result.monthly[8]?.gross).toBe(15000)
+    expect(result.monthly[9]?.gross).toBe(15000)
+  })
+
+  it('五险一金与工资同属一个月', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })],
+        insurance: makeInsurance({ clampEnabled: false, items: allItemsEnabled() }),
+        stages: [makeStage('regular', 1, 12)],
+        payTiming: 'next',
+      }),
+    )
+    result.monthly.forEach((item, index) => {
+      expect(item.insurancePersonal).toBe(result.insuranceMonthly[index]?.personalTotal)
+    })
+  })
+
   it('实习期不缴纳五险一金', () => {
     const result = calculateSalary(
       makeInput({ incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })], stages }),
@@ -564,6 +639,30 @@ describe('险种缴纳口径', () => {
     expect(detail[0]?.personal.medical).toBe(96.98)
   })
 
+  it('当月收入为 0 时大病医疗固定额不叠加，避免凭空扣款', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [
+        makeIncome({
+          amount: 4699,
+          intoInsuranceBase: true,
+          variableByMonth: true,
+          monthlyAmounts: [4699, 4699, 0, 4699, 4699, 4699, 4699, 4699, 4699, 4699, 4699, 4699],
+        }),
+      ],
+      insurance: makeInsurance({
+        cityCode: 'default',
+        clampEnabled: false,
+        medicalFixed: 3,
+        items: allItemsEnabled(),
+      }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [],
+    })
+    expect(detail[2]?.personal.medical).toBe(0)
+    expect(detail[2]?.personalTotal).toBe(0)
+  })
+
   it('公积金缴费额按元取整，其余险种保留到分', () => {
     const detail = computeInsuranceMonthly({
       incomes: [makeIncome({ amount: 10001, intoInsuranceBase: true })],
@@ -581,7 +680,73 @@ describe('险种缴纳口径', () => {
     // 养老 8% 保留两位小数
     expect(detail[0]?.personal.pension).toBe(800.08)
   })
+
+  it('北京大额医疗费用补助按基数 0.75% 由单位缴纳', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [makeIncome({ amount: 4699, intoInsuranceBase: true })],
+      insurance: makeInsurance({
+        cityCode: 'beijing',
+        clampEnabled: false,
+        items: allItemsEnabled(),
+      }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [],
+    })
+    expect(detail[0]?.personal.largeMedical).toBe(0)
+    expect(detail[0]?.company.largeMedical).toBe(35.24)
+    // 视为单位负担的一部分，计入单位缴纳合计
+    expect(detail[0]?.companyTotal).toBeGreaterThanOrEqual(35.24)
+  })
 })
+
+describe('自定义城市政策', () => {
+  const custom: CityPolicy = {
+    code: 'beijing',
+    name: '北京（自定义）',
+    base: { lower: 10000, upper: 20000 },
+    rates: {
+      pension: { personal: 0.1, company: 0.1 },
+      medical: null,
+      largeMedical: null,
+      unemployment: null,
+      injury: null,
+      maternity: null,
+      housingFund: null,
+    },
+    medicalFixed: 0,
+    referenceYear: 2026,
+  }
+
+  it('自定义城市覆盖同名内置城市并参与基数与比例计算', () => {
+    const detail = computeInsuranceMonthly({
+      incomes: [makeIncome({ amount: 15000, intoInsuranceBase: true })],
+      insurance: makeInsurance({
+        cityCode: 'beijing',
+        clampEnabled: true,
+        items: { ...makeInsurance().items, pension: { enabled: true } },
+      }),
+      startMonth: 1,
+      endMonth: 12,
+      stages: [],
+      customCities: [custom],
+    })
+
+    expect(detail[0]?.base).toBe(15000)
+    expect(detail[0]?.personal.pension).toBe(1500)
+    expect(detail[0]?.personalTotal).toBe(1500)
+  })
+
+  it('未提供自定义城市时仍使用内置政策', () => {
+    expect(resolveCity('beijing').name).toBe('北京')
+    expect(resolveCity('beijing').base.upper).toBe(35283)
+  })
+
+  it('未匹配到自定义与内置城市时回落默认政策', () => {
+    expect(resolveCity('custom_missing', [custom]).code).toBe('default')
+  })
+})
+
 
 describe('边界与异常', () => {
   it('全部收入为 0 时不产生 NaN', () => {
@@ -834,7 +999,7 @@ describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
     expect(result.annual.taxFreeIncome).toBe(10000)
   })
 
-  it('非居民个人的额外收入按减除费用后的收入额并入当月计税', () => {
+  it('非居民个人工资薪金与额外收入按次分项计税', () => {
     const result = calculateSalary(
       makeInput({
         incomes: [
@@ -844,12 +1009,14 @@ describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
         taxpayerType: 'nonResident',
       }),
     )
-    // 3 月：工资 10000 + 劳务收入额 8000 − 5000 = 13000，按月换算表 20% 档速算 1410
+    // 3 月：工资 10000 − 5000 = 5000，月度税率表 290；
+    // 劳务收入额 8000 按次单独适用月度税率表：8000 × 10% − 210 = 590
     expect(result.monthly[2]?.otherIncome).toBe(8000)
-    expect(result.monthly[2]?.tax).toBe(1190)
+    expect(result.monthly[2]?.tax).toBe(290)
+    expect(result.monthly[2]?.otherTax).toBe(590)
   })
 
-  it('非居民个人的额外收入只计税一次，不叠加按次预扣税', () => {
+  it('非居民个人额外收入单独计税，不与工资合并二次扣减费用', () => {
     const result = calculateSalary(
       makeInput({
         incomes: [
@@ -859,11 +1026,11 @@ describe('额外收入（劳务报酬/稿酬/特许权使用费）', () => {
         taxpayerType: 'nonResident',
       }),
     )
-    // 额外收入已并入当月计税，otherTax 不应再单独扣一次
-    expect(result.monthly[2]?.otherTax).toBe(0)
-    expect(result.annual.otherTax).toBe(0)
-    // 11 个月 × 290 + 3 月的 1190
-    expect(result.annual.tax).toBe(4380)
+    // 额外收入按收入额单独计税，只扣一次税、不叠加按次预扣
+    expect(result.monthly[2]?.otherTax).toBe(590)
+    expect(result.annual.otherTax).toBe(590)
+    // 12 个月工资税 290 × 12 + 3 月额外收入税 590
+    expect(result.annual.tax).toBe(4070)
     // 非居民个人不适用年度汇算
     expect(result.annual.settlementTax).toBe(0)
     expect(result.annual.settlementDiff).toBe(0)
@@ -1238,5 +1405,133 @@ describe('计税口径修正', () => {
     const shared = makeDeductions()
     shared.elderlySupport = { enabled: true, amount: 3000, share: 1, month: 1, soleProvider: false }
     expect(calculateSalary(makeInput({ deductions: shared })).monthly[0]?.deductionTotal).toBe(1500)
+  })
+})
+
+describe('目标倒推', () => {
+  it('按期望月度到手反推税前月薪，回代误差不超过 1 元', () => {
+    const input = makeInput({
+      incomes: [makeIncome({ id: 'salary', amount: 20000 })],
+    })
+    const months = 12
+    const baseline = calculateSalary(input)
+    const target = Math.round((baseline.annual.net / months) * 100) / 100
+
+    const plan = reverseMonthlyNet({ input, targetMonthlyNet: target, adjustIncomeId: 'salary' })
+    expect(plan).not.toBeNull()
+    expect(plan?.reachable).toBe(true)
+    expect(Math.abs((plan?.monthlyNet ?? 0) - target)).toBeLessThanOrEqual(1)
+
+    const applied = calculateSalary({
+      ...input,
+      incomes: [makeIncome({ id: 'salary', amount: plan?.monthlyIncome ?? 0 })],
+    })
+    expect(Math.abs(applied.annual.net / months - target)).toBeLessThanOrEqual(1)
+  })
+
+  it('税率跳档处仍能反推到目标区间', () => {
+    const input = makeInput({ incomes: [makeIncome({ id: 'salary', amount: 30000 })] })
+    const target = 25000
+    const plan = reverseMonthlyNet({ input, targetMonthlyNet: target })
+    expect(plan?.reachable).toBe(true)
+    expect(Math.abs((plan?.monthlyNet ?? 0) - target)).toBeLessThanOrEqual(1)
+  })
+
+  it('目标超出可反推范围时判定为不可达', () => {
+    const input = makeInput({ incomes: [makeIncome({ id: 'salary', amount: 20000 })] })
+    const plan = reverseMonthlyNet({ input, targetMonthlyNet: 1e9 })
+    expect(plan?.reachable).toBe(false)
+  })
+
+  it('零收入时到手仍高于目标，返回最低可达值', () => {
+    const input = makeInput({
+      incomes: [
+        makeIncome({ id: 'salary', amount: 20000 }),
+        makeIncome({ id: 'extra', name: '固定津贴', amount: 10000 }),
+      ],
+    })
+    const plan = reverseMonthlyNet({ input, targetMonthlyNet: 0 })
+    expect(plan?.reachable).toBe(false)
+    expect(plan?.minMonthlyNet).toBeGreaterThan(0)
+  })
+})
+
+describe('年终奖拆分精确优化', () => {
+  it('在税率跳档边界取得全局最优解', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 5000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 100000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+      }),
+    )
+    // 综合所得应纳税所得额 0 时，单独计税 36000（月度档位 3000 × 12）恰好是折点
+    expect(result.appliedBonusMode).toBe('split')
+    expect(result.bonusComparison?.splitAmount).toBe(36000)
+    expect(result.bonusComparison?.splitTax).toBe(4960)
+  })
+
+  it('拆分结果不劣于并入与全额单独两种口径', () => {
+    const result = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 24000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 80000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+      }),
+    )
+    const comparison = result.bonusComparison
+    expect(comparison).toBeDefined()
+    const mergedTax = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 24000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 80000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+        bonusMode: 'merged',
+      }),
+    ).annual.tax
+    const separateTax = calculateSalary(
+      makeInput({
+        incomes: [
+          makeIncome({ id: 'salary', amount: 24000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 80000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+        bonusMode: 'separate',
+      }),
+    ).annual.tax
+    expect(comparison?.splitTax ?? 0).toBeLessThanOrEqual(Math.min(mergedTax, separateTax))
+  })
+})
+
+describe('年终奖政策边界', () => {
+  it('政策到期后自动降级为并入综合所得', () => {
+    const result = calculateSalary(
+      makeInput({
+        year: 2028,
+        incomes: [
+          makeIncome({ id: 'salary', amount: 20000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 60000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+      }),
+    )
+    expect(result.bonusPolicyActive).toBe(false)
+    expect(result.appliedBonusMode).toBe('merged')
+    expect(result.bonusComparison).toBeUndefined()
+  })
+
+  it('政策有效年度内保留三口径对比', () => {
+    const result = calculateSalary(
+      makeInput({
+        year: 2027,
+        incomes: [
+          makeIncome({ id: 'salary', amount: 20000 }),
+          makeIncome({ id: 'bonus', name: '年终奖', amount: 60000, cycle: 'once', month: 12, kind: 'bonus' }),
+        ],
+      }),
+    )
+    expect(result.bonusPolicyActive).toBe(true)
+    expect(result.bonusComparison).toBeDefined()
   })
 })

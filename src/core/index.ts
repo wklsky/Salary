@@ -15,7 +15,8 @@ import type {
   SalaryInput,
   SalaryResult,
 } from '@/types'
-import { MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
+import { BONUS_SEPARATE_POLICY_END_YEAR } from '@/config/policy'
+import { ANNUAL_TAX_BRACKETS, MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { bonusTaxSeparate, findInvalidRange } from './bonus'
 import { computeInsuranceMonthly } from './insurance'
 import { dec, round2, sumMoney } from './money'
@@ -71,18 +72,19 @@ function buildCustomIncomeItems(
     }))
 }
 
-/** 一次性收入在发放月的实际金额：单月覆盖优先，其次按发放月所处阶段取值 */
-function paidAmountOfItem(
+/** 一次性收入在归属月的实际金额：单月覆盖优先，其次按归属月所处阶段取值 */
+export function paidAmountOfItem(
   item: IncomeItem,
   stages: SalaryInput['stages'],
   monthOverrides: Record<number, MonthOverride>,
 ): number {
+  // 明细按工资所属月展示，一次性收入计入其归属月，不随发放时间顺延
   const override = monthOverrides[item.month]?.amounts?.[item.id]
   if (typeof override === 'number') return override
   return amountOfMonth(item, item.month, stageTypeOfMonth(stages, item.month))
 }
 
-/** 收集当年一次性奖金，金额按发放当月所处阶段取值，按金额从大到小排序 */
+/** 收集当年一次性奖金，金额按归属当月所处阶段取值，按金额从大到小排序 */
 function collectBonusItems(
   incomes: IncomeItem[],
   stages: SalaryInput['stages'],
@@ -116,25 +118,41 @@ function runEngine(
     taxReductionMonthly: input.taxReductionMonthly,
     monthOverrides: input.monthOverrides ?? {},
     postTaxDeductions: input.postTaxDeductions ?? [],
+    payTiming: input.payTiming ?? 'same',
   })
 }
 
 /**
- * 枚举单独计税金额的候选点
- * 除均匀分布采样外，额外加入月度税率表的档位边界（×12），
- * 边界值本身正是「多发反而少拿」无效区间的左端点，天然是最优解的候选
+ * 枚举单独计税金额的精确候选点
+ *
+ * 总税负 = 综合所得个税（基数随单独计税金额增大而线性下降） + 年终奖单独计税（随金额分段线性上升），
+ * 两部分都是分段线性函数，段内极值只可能落在端点，因此全局最优解只需在以下端点中搜索：
+ * 0、奖金全额、月度税率表档位边界 ×12、综合所得年度税率表档位被跨过时对应的拆分点。
+ * 公益捐赠比例限额会引入一个额外折点，一并纳入候选。
  */
-function bonusSplitCandidates(amount: number): number[] {
+function bonusSplitCandidates(
+  amount: number,
+  mergedTaxable: number,
+  donationDeclared: number,
+): number[] {
   const candidates = new Set<number>([0, amount])
+  // 未扣捐赠前的应纳税所得额，用于定位年度税率表档位与捐赠限额折点
+  const tentative = round2(dec(mergedTaxable).plus(donationDeclared))
   MONTHLY_TAX_BRACKETS.forEach((bracket) => {
     if (!Number.isFinite(bracket.upper)) return
     const boundary = round2(dec(bracket.upper).mul(12))
-    if (boundary < amount) candidates.add(boundary)
+    if (boundary > 0 && boundary < amount) candidates.add(boundary)
   })
-  // 采样密度兼顾精度与响应速度：每次计算都会重跑 12 个月引擎，过密会拖慢输入
-  const steps = 48
-  for (let index = 1; index < steps; index += 1) {
-    candidates.add(round2(dec(amount).mul(index).div(steps)))
+  ANNUAL_TAX_BRACKETS.forEach((bracket) => {
+    if (!Number.isFinite(bracket.upper)) return
+    // 综合所得应纳税所得额 = tentative − s，跨过档位边界时 s = tentative − upper
+    const boundary = round2(dec(tentative).minus(bracket.upper))
+    if (boundary > 0 && boundary < amount) candidates.add(boundary)
+  })
+  // 捐赠比例限额生效的折点：0.3 × tentative(s) = 申报捐赠额
+  if (donationDeclared > 0) {
+    const boundary = round2(dec(tentative).minus(dec(donationDeclared).div(0.3)))
+    if (boundary > 0 && boundary < amount) candidates.add(boundary)
   }
   return [...candidates].filter((value) => value >= 0 && value <= amount).sort((a, b) => a - b)
 }
@@ -160,9 +178,10 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
     endMonth: input.endMonth,
     stages: input.stages,
     monthOverrides,
+    customCities: input.customCities,
   })
 
-  // 年终奖金额按发放当月所处阶段取值，试用期发放的奖金可能低于转正后
+  // 年终奖金额按归属当月所处阶段取值，试用期发放的奖金可能低于转正后
   const bonusAmount = sumMoney(
     incomes
       .filter((item) => item.enabled && item.kind === 'bonus')
@@ -170,8 +189,10 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
   )
 
   const isResident = input.taxpayerType !== 'nonResident'
+  // 年终奖单独计税政策仅适用于居民个人且在政策有效年度内，过期后自动降级为并入综合所得
+  const bonusPolicyActive = isResident && input.year <= BONUS_SEPARATE_POLICY_END_YEAR
   // 一个纳税年度内只允许一笔奖金享受单独计税，取金额最大的那笔
-  const topBonus = isResident
+  const topBonus = bonusPolicyActive
     ? collectBonusItems(incomes, input.stages, monthOverrides)[0]
     : undefined
 
@@ -200,7 +221,11 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
     let bestAmount = separate.tax <= merged.tax ? topBonus.amount : 0
     let bestResult = separate.tax <= merged.tax ? separate : merged
 
-    for (const amount of bonusSplitCandidates(topBonus.amount)) {
+    for (const amount of bonusSplitCandidates(
+      topBonus.amount,
+      merged.taxableIncome,
+      merged.donationDeclaredAnnual,
+    )) {
       if (amount === topBonus.amount || amount === 0) continue
       const candidate = runEngine(input, insuranceMonthly, { [topBonus.id]: amount })
       if (candidate.tax < bestTax) {
@@ -301,6 +326,7 @@ export function calculateSalary(rawInput: SalaryInput): SalaryResult {
     annual,
     bonusComparison,
     appliedBonusMode: applied,
+    bonusPolicyActive,
   }
 }
 
@@ -328,3 +354,5 @@ export {
   skippedInsuranceTypesOfMonth,
 } from './stage'
 export * from './money'
+export { reverseMonthlyNet, eligibleAdjustIncomes } from './reverse'
+export type { ReverseParams, ReversePlan } from './reverse'

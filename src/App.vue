@@ -5,10 +5,11 @@
  * @Description: 应用外壳：视图切换（录入设置 / 月度明细）、方案存档与导入导出
  */
 import { computed, nextTick, ref, watch } from 'vue'
-import { Delete, Download, Expand, Fold, MoreFilled, Refresh, Upload } from '@element-plus/icons-vue'
+import { Delete, Download, Expand, Fold, Moon, MoreFilled, Refresh, Sunny, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useWindowSize } from '@vueuse/core'
 import AdminSidebar from '@/components/layout/AdminSidebar.vue'
+import CompareView from '@/components/layout/CompareView.vue'
 import SetupView from '@/components/layout/SetupView.vue'
 import TableView from '@/components/layout/TableView.vue'
 import ColumnConfigDrawer from '@/components/table-config/ColumnConfigDrawer.vue'
@@ -16,16 +17,19 @@ import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import { useExport } from '@/composables/useExport'
 import { useCountUp } from '@/composables/useCountUp'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
+import { useTheme } from '@/composables/useTheme'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import type {
   AppView,
   BonusMode,
+  CityPolicy,
   NavItem,
   SetupSectionKey,
   TableSectionKey,
   TaxpayerType,
+  PayTiming,
 } from '@/types'
 
 const salaryStore = useSalaryStore()
@@ -33,6 +37,7 @@ const settingsStore = useSettingsStore()
 const schemaStore = useTableSchemaStore()
 const { result } = useSalaryCalculator()
 const { exportJson, readJsonFile } = useExport()
+const { isDark, toggleTheme } = useTheme()
 
 const view = ref<AppView>('setup')
 const drawerVisible = ref(false)
@@ -47,11 +52,18 @@ const tableSections = ref<NavItem[]>([])
 /** 初始默认高亮计算周期，子视图的滚动监听会很快接管 */
 const activeSection = ref('period')
 
-const currentSections = computed(() =>
-  view.value === 'setup' ? setupSections.value : tableSections.value,
-)
+const currentSections = computed(() => {
+  if (view.value === 'setup') return setupSections.value
+  if (view.value === 'table') return tableSections.value
+  return []
+})
 
-const viewLabel = computed(() => (view.value === 'setup' ? '录入设置' : '月度明细'))
+const VIEW_LABELS: Record<AppView, string> = {
+  setup: '录入设置',
+  table: '月度明细',
+  compare: '方案对比',
+}
+const viewLabel = computed(() => VIEW_LABELS[view.value])
 const activeSectionLabel = computed(
   () => currentSections.value.find((item) => item.key === activeSection.value)?.label ?? '',
 )
@@ -65,7 +77,7 @@ function onSelectView(next: AppView) {
   if (view.value === next) return
   view.value = next
   // 同步切到新视图首分页，避免视图切换瞬间出现空白页
-  activeSection.value = next === 'setup' ? 'period' : 'overview'
+  activeSection.value = next === 'setup' ? 'period' : next === 'table' ? 'overview' : ''
 }
 
 /** 桌面端折叠/展开侧边栏，窄屏改为打开抽屉菜单 */
@@ -99,13 +111,6 @@ function onTableSections(items: NavItem[]) {
 function onNavSelect(key: string) {
   navDrawerVisible.value = false
   if (!key) return
-  activeSection.value = key
-}
-
-/** 结果视图的引导入口：跳回录入视图并直达指定分区（如年终奖引导 → 收入项） */
-function onGotoSetupSection(key: SetupSectionKey) {
-  navDrawerVisible.value = false
-  view.value = 'setup'
   activeSection.value = key
 }
 
@@ -167,6 +172,8 @@ async function onExportJson() {
       taxpayerType: settingsStore.taxpayerType,
       taxReductionMonthly: settingsStore.taxReductionMonthly,
       reverseAdjustIncomeId: settingsStore.reverseAdjustIncomeId,
+      customCities: settingsStore.customCities,
+      payTiming: settingsStore.payTiming,
       ...salaryStore.exportSnapshot(),
       // 自定义列会影响计税与应发，必须与薪资入参一起迁移
       tableSchema: schemaStore.exportSchema(),
@@ -194,6 +201,9 @@ async function onImportJson(rawFile: File) {
       postTaxDeductions?: Parameters<
         typeof salaryStore.importSnapshot
       >[0]['postTaxDeductions']
+      schemes?: Parameters<typeof salaryStore.importSnapshot>[0]['schemes']
+      customCities?: CityPolicy[]
+      payTiming?: PayTiming
       tableSchema?: Parameters<typeof schemaStore.importSchema>[0]
     }>(rawFile)
 
@@ -213,6 +223,8 @@ async function onImportJson(rawFile: File) {
       taxpayerType: payload.taxpayerType,
       taxReductionMonthly: payload.taxReductionMonthly,
       reverseAdjustIncomeId: payload.reverseAdjustIncomeId,
+      customCities: payload.customCities,
+      payTiming: payload.payTiming,
     })
     activeSchemeId.value = ''
     ElMessage.success('配置已导入')
@@ -290,7 +302,7 @@ async function onRemoveScheme() {
 
 async function onReset() {
   try {
-    await ElMessageBox.confirm('将清空当前录入并恢复默认示例数据，是否继续？', '重置确认', {
+    await ElMessageBox.confirm('将清空当前录入并恢复为初始数据（金额均为 0），是否继续？', '重置确认', {
       type: 'warning',
     })
     salaryStore.resetAll()
@@ -407,6 +419,19 @@ function onCommand(command: string) {
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <el-tooltip :content="isDark ? '切换到浅色' : '切换到深色'" placement="bottom">
+            <button
+              type="button"
+              class="app__theme-toggle"
+              :aria-label="isDark ? '切换到浅色' : '切换到深色'"
+              @click="toggleTheme"
+            >
+              <el-icon>
+                <Sunny v-if="isDark" />
+                <Moon v-else />
+              </el-icon>
+            </button>
+          </el-tooltip>
         </div>
 
         <input
@@ -427,14 +452,14 @@ function onCommand(command: string) {
           @select-section="onNavSelect"
         />
         <TableView
-          v-else
+          v-else-if="view === 'table'"
           :section="activeSection as TableSectionKey"
           @back="onSelectView('setup')"
           @config-columns="drawerVisible = true"
           @sections="onTableSections"
           @select-section="onNavSelect"
-          @goto-income="onGotoSetupSection('income')"
         />
+        <CompareView v-else />
       </main>
 
       <footer class="app__footer">
@@ -532,7 +557,7 @@ function onCommand(command: string) {
 }
 
 .app__toggle:hover {
-  background: #f1f5f9;
+  background: var(--app-sunken-2);
   color: var(--app-ink-900);
 }
 
@@ -605,6 +630,37 @@ function onCommand(command: string) {
   width: 148px;
 }
 
+/* 主题切换：比普通按钮更轻，只在悬停时浮出底色 */
+.app__theme-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-ink-500);
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.app__theme-toggle:hover {
+  border-color: var(--app-jade-600);
+  background: var(--app-jade-100);
+  color: var(--app-jade-700);
+}
+
+.app__theme-toggle:focus-visible {
+  outline: 2px solid var(--app-jade-600);
+  outline-offset: 2px;
+}
+
 .app__body {
   flex: 1 1 auto;
   min-width: 0;
@@ -621,7 +677,7 @@ function onCommand(command: string) {
   justify-content: center;
   gap: 4px 20px;
   padding: 7px 20px;
-  background: rgb(255 255 255 / 60%);
+  background: color-mix(in srgb, var(--app-surface) 60%, transparent);
   border-top: 1px solid var(--app-line);
   font-size: 11px;
   color: var(--app-ink-300);

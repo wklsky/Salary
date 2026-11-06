@@ -22,6 +22,13 @@ const currentBonusMode = computed({
   get: () => settingsStore.bonusMode,
   set: (value: BonusMode) => settingsStore.updateSettings({ bonusMode: value }),
 })
+
+/** 次月发放开关：只影响工资到账时间提示，明细仍按工资所属月展示 */
+const nextMonthPay = computed({
+  get: () => settingsStore.payTiming === 'next',
+  set: (value: boolean) =>
+    settingsStore.updateSettings({ payTiming: value ? 'next' : 'same' }),
+})
 </script>
 
 <template>
@@ -43,6 +50,14 @@ const currentBonusMode = computed({
           "
         />
         <span class="advanced-form__unit">元/月</span>
+      </el-form-item>
+      <el-form-item label="工资发放">
+        <el-switch
+          v-model="nextMonthPay"
+          active-text="次月发放"
+          inactive-text="当月发放"
+        />
+        <span class="advanced-form__unit">次月发放：工资与五险一金在次月一并到账</span>
       </el-form-item>
       <el-form-item label="年终奖计税">
         <el-radio-group v-model="currentBonusMode">
@@ -77,7 +92,7 @@ const currentBonusMode = computed({
   color: var(--app-ink-500);
 }
 
-/* 宽屏双列：纳税人身份独占首行，减免税额与年终奖计税并排 */
+/* 宽屏双列：身份与计税口径独占整行，减免税额与工资发放并排 */
 @media (min-width: 900px) {
   .advanced-form :deep(.el-form) {
     display: grid;
@@ -85,7 +100,8 @@ const currentBonusMode = computed({
     gap: 0 24px;
   }
 
-  .advanced-form :deep(.el-form-item:nth-child(1)) {
+  .advanced-form :deep(.el-form-item:nth-child(1)),
+  .advanced-form :deep(.el-form-item:nth-child(4)) {
     grid-column: 1 / -1;
   }
 }

@@ -5,7 +5,7 @@
  */
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import type { BonusMode, TaxpayerType } from '@/types'
+import type { BonusMode, CityPolicy, PayTiming, TaxpayerType } from '@/types'
 
 /** 一年最多 12 个月，计算区间不得跨自然年 */
 const MAX_MONTH = 12
@@ -27,6 +27,20 @@ interface SettingsPayload {
   taxReductionMonthly: number
   /** 表格内反推应发/实发/个税时用于调整的工资项 id；空字符串表示自动选择 */
   reverseAdjustIncomeId: string
+  /** 界面主题：浅色 / 深色 */
+  theme: ThemeMode
+  /** 用户自定义城市政策，随设置一起持久化 */
+  customCities: CityPolicy[]
+  /** 工资发放时间：当月发放 / 次月发放 */
+  payTiming: PayTiming
+}
+
+export type ThemeMode = 'light' | 'dark'
+
+/** 首次进入时跟随系统偏好，之后以用户选择为准 */
+function preferredTheme(): ThemeMode {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 export const useSettingsStore = defineStore(
@@ -80,6 +94,26 @@ export const useSettingsStore = defineStore(
     const taxReductionMonthly = ref<number>(0)
     /** 反推调整项：表格内修改应发/实发/个税时，通过调整该工资项达到目标 */
     const reverseAdjustIncomeId = ref<string>('')
+    /** 界面主题，首次进入跟随系统偏好 */
+    const theme = ref<ThemeMode>(preferredTheme())
+    /** 用户自定义城市，与内置城市同 code 时优先使用自定义版本 */
+    const customCities = ref<CityPolicy[]>([])
+    /** 工资发放时间：次月发放时按实际发放月计税，阶段工资按归属月判定 */
+    const payTiming = ref<PayTiming>('same')
+
+    /** 新增或覆盖一个自定义城市（按 code 覆盖） */
+    function upsertCustomCity(city: CityPolicy) {
+      const index = customCities.value.findIndex((item) => item.code === city.code)
+      if (index >= 0) {
+        customCities.value.splice(index, 1, { ...city })
+      } else {
+        customCities.value.push({ ...city })
+      }
+    }
+
+    function removeCustomCity(code: string) {
+      customCities.value = customCities.value.filter((item) => item.code !== code)
+    }
 
     function updateSettings(payload: Partial<SettingsPayload>) {
       if (payload.year !== undefined) year.value = payload.year
@@ -98,6 +132,11 @@ export const useSettingsStore = defineStore(
       if (payload.reverseAdjustIncomeId !== undefined) {
         reverseAdjustIncomeId.value = payload.reverseAdjustIncomeId
       }
+      if (payload.theme !== undefined) theme.value = payload.theme
+      if (payload.customCities !== undefined) {
+        customCities.value = Array.isArray(payload.customCities) ? payload.customCities : []
+      }
+      if (payload.payTiming !== undefined) payTiming.value = payload.payTiming
       // 保证在职区间合法，避免离职月早于入职月导致零收入
       if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
       // 起始月变化后月数可能溢出年末，收回到年末为止
@@ -113,6 +152,9 @@ export const useSettingsStore = defineStore(
       if (!taxpayerType.value) taxpayerType.value = 'resident'
       if (typeof taxReductionMonthly.value !== 'number') taxReductionMonthly.value = 0
       if (typeof reverseAdjustIncomeId.value !== 'string') reverseAdjustIncomeId.value = ''
+      if (theme.value !== 'light' && theme.value !== 'dark') theme.value = preferredTheme()
+      if (!Array.isArray(customCities.value)) customCities.value = []
+      if (payTiming.value !== 'same' && payTiming.value !== 'next') payTiming.value = 'same'
     }
 
     return {
@@ -126,6 +168,11 @@ export const useSettingsStore = defineStore(
       taxpayerType,
       taxReductionMonthly,
       reverseAdjustIncomeId,
+      theme,
+      customCities,
+      payTiming,
+      upsertCustomCity,
+      removeCustomCity,
       updateSettings,
       normalize,
     }

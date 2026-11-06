@@ -360,7 +360,7 @@ const settlementText = computed(() => {
 
 .stat--settlement {
   border-color: var(--app-jade-100);
-  background: linear-gradient(180deg, #f5fbfa, #fff);
+  background: linear-gradient(180deg, var(--app-jade-100), var(--app-surface));
 }
 
 /* 指标卡悬停微反馈：轻微上浮 + 玉色描边，减少动效时直接关闭过渡 */

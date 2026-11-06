@@ -9,6 +9,7 @@ import { INSURANCE_TYPES } from '@/types'
 export const INSURANCE_LABELS: Record<InsuranceType, string> = {
   pension: '养老保险',
   medical: '医疗保险',
+  largeMedical: '大额医疗',
   unemployment: '失业保险',
   injury: '工伤保险',
   maternity: '生育保险',
@@ -252,7 +253,8 @@ export function createStaticColumns(): ColumnSchema[] {
       key: 'cumulativeTaxable',
       label: '累计应纳税所得额',
       group: 'tax',
-      visible: false,
+      // 默认展示：累计口径是理解「某个月税额突然变高」的关键
+      visible: true,
       order: 400,
       width: 150,
       formatter: 'money',
@@ -262,7 +264,7 @@ export function createStaticColumns(): ColumnSchema[] {
       key: 'cumulativeTaxPaid',
       label: '累计已预扣税额',
       group: 'tax',
-      visible: false,
+      visible: true,
       order: 401,
       width: 140,
       formatter: 'money',

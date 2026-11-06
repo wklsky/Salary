@@ -25,12 +25,6 @@ export function formatPercent(ratio: number | undefined | null, digits = 1): str
   return `${(ratio * 100).toFixed(digits)}%`
 }
 
-/** 把 0-1 的比例格式化为百分比字符串（入参已是百分数时使用） */
-export function formatRate(rate: number | undefined | null, digits = 1): string {
-  if (rate === undefined || rate === null || Number.isNaN(rate)) return '—'
-  return `${(rate * 100).toFixed(digits)}%`
-}
-
 export function formatMonth(month: number): string {
   return `${month} 月`
 }

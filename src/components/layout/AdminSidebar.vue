@@ -5,7 +5,7 @@
  * @Description: 管理后台风格侧边菜单：视图切换与当前页面分区目录
  */
 import { computed } from 'vue'
-import { DataLine, EditPen } from '@element-plus/icons-vue'
+import { DataLine, EditPen, Histogram } from '@element-plus/icons-vue'
 import type { AppView, NavItem } from '@/types'
 
 interface Props {
@@ -17,11 +17,14 @@ interface Props {
   setupItems: NavItem[]
   /** 月度明细分区 */
   tableItems: NavItem[]
+  /** 方案对比页没有分区，留空即可 */
+  compareItems?: NavItem[]
   /** 桌面端收起侧边栏 */
   collapsed?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  compareItems: () => [],
   collapsed: false,
 })
 
@@ -30,7 +33,11 @@ const emit = defineEmits<{
   'select-section': [key: string]
 }>()
 
-const items = computed(() => (props.view === 'setup' ? props.setupItems : props.tableItems))
+const items = computed(() => {
+  if (props.view === 'setup') return props.setupItems
+  if (props.view === 'table') return props.tableItems
+  return props.compareItems
+})
 
 function sectionTitle(item: NavItem): string {
   return item.meta ? `${item.label} · ${item.meta}` : item.label
@@ -70,9 +77,19 @@ function sectionTitle(item: NavItem): string {
           <el-icon class="admin-menu__icon"><DataLine /></el-icon>
           <span v-if="!props.collapsed" class="admin-menu__label">月度明细</span>
         </button>
+        <button
+          type="button"
+          class="admin-menu__item"
+          :class="{ 'is-active': props.view === 'compare' }"
+          title="方案对比"
+          @click="emit('select-view', 'compare')"
+        >
+          <el-icon class="admin-menu__icon"><Histogram /></el-icon>
+          <span v-if="!props.collapsed" class="admin-menu__label">方案对比</span>
+        </button>
       </div>
 
-      <div class="admin-menu">
+      <div v-if="items.length" class="admin-menu">
         <p v-if="!props.collapsed" class="admin-menu__title">本页目录</p>
         <button
           v-for="item in items"

@@ -27,6 +27,7 @@ export function useSalaryCalculator(): SalaryCalculator {
     insurance: salaryStore.insurance,
     deductions: salaryStore.deductions,
     bonusMode: settingsStore.bonusMode,
+    payTiming: settingsStore.payTiming,
     stages: salaryStore.stages,
     endMonth: settingsStore.endMonth,
     taxpayerType: settingsStore.taxpayerType,
@@ -34,6 +35,7 @@ export function useSalaryCalculator(): SalaryCalculator {
     monthOverrides: salaryStore.monthOverrides,
     customColumns: schemaStore.customColumnItems,
     postTaxDeductions: salaryStore.postTaxDeductions,
+    customCities: settingsStore.customCities,
   }))
 
   // 计算内核为纯函数，入参变化即重算；12 个月的循环开销可忽略，不做防抖

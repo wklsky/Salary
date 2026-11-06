@@ -65,6 +65,7 @@ function hasAdjustment(month: number): boolean {
 const emit = defineEmits<{
   'row-click': [row: MonthlyResult]
   'config-columns': []
+  'payroll-check': []
 }>()
 
 const stripe = ref(true)
@@ -154,6 +155,19 @@ function cellText(row: Row, column: ColumnSchema): string {
   return total.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** 累计税额两列联动显隐，作为理解税额变化的快捷入口 */
+const cumulativeVisible = computed(() =>
+  columns.value.some(
+    (column) => column.key === 'cumulativeTaxable' || column.key === 'cumulativeTaxPaid',
+  ),
+)
+
+function toggleCumulativeColumns() {
+  const next = !cumulativeVisible.value
+  schemaStore.toggleColumn('cumulativeTaxable', next)
+  schemaStore.toggleColumn('cumulativeTaxPaid', next)
+}
+
 function rowClassName({ row }: { row: Row }): string {
   return row.isTotal ? 'total-row' : 'data-row'
 }
@@ -230,16 +244,20 @@ function inputText(month: number, column: ColumnSchema): string {
   return column.formatter === 'number' ? trimNumber(value) : value.toFixed(2)
 }
 
-function cellTitle(column: ColumnSchema): string {
+function cellTitle(row: Row, column: ColumnSchema): string {
   switch (kindOf(column)) {
     case 'income': {
       const item = salaryStore.incomes.find((entry) => entry.id === column.key)
-      return item?.scoreBased
-        ? '可编辑金额，系统按每分金额自动反算绩效分数'
-        : '可直接编辑该收入项本月金额'
+      if (!item?.scoreBased) return '可直接编辑该收入项本月金额'
+      const score = row.incomeScores?.[item.id] ?? 0
+      return `按 ${score} 分 × ¥${item.perPointAmount ?? 0}/分 计算，可编辑金额或分数`
     }
-    case 'score':
-      return '可编辑分数，绩效金额按每分金额自动联动'
+    case 'score': {
+      const id = itemIdOf(column.key, 'score')
+      const item = salaryStore.incomes.find((entry) => entry.id === id)
+      const score = row.incomeScores?.[id] ?? 0
+      return `${item?.name ?? '计分项'}：${score} 分 × ¥${item?.perPointAmount ?? 0}/分，金额自动联动`
+    }
     case 'postTax':
       return '可直接编辑本月税后扣款金额'
     case 'note':
@@ -321,6 +339,12 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
           <el-button size="small" text type="primary" @click="emit('config-columns')">
             配置
           </el-button>
+          <el-button size="small" text type="primary" @click="toggleCumulativeColumns">
+            {{ cumulativeVisible ? '隐藏累计税额' : '显示累计税额' }}
+          </el-button>
+          <el-button size="small" text type="primary" @click="emit('payroll-check')">
+            工资单核对
+          </el-button>
         </span>
       </div>
       <div class="monthly-table__ops">
@@ -360,7 +384,7 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
               'cell-input--text': kindOf(column) === 'note',
             }"
             :value="inputText(row.month, column)"
-            :title="cellTitle(column)"
+            :title="cellTitle(row as Row, column)"
             :inputmode="kindOf(column) === 'note' ? undefined : 'decimal'"
             autocomplete="off"
             @click.stop

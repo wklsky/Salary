@@ -9,7 +9,7 @@ import type { DeductionKey, DeductionStateMap, MonthOverride } from '@/types'
 import type { IncomeItem } from '@/types'
 import type { InsuranceMonthDetail, MonthlyResult } from '@/types'
 import type { PostTaxDeductionItem } from '@/types'
-import type { StageRange, TaxpayerType } from '@/types'
+import type { PayTiming, StageRange, TaxpayerType } from '@/types'
 import { ANNUAL_TAX_BRACKETS, MONTHLY_TAX_BRACKETS } from '@/config/taxBrackets'
 import { DEDUCTION_CATALOG } from '@/config/specialDeductions'
 import { isOtherIncomeKind, otherIncomeAmount, otherIncomeTax } from './otherIncome'
@@ -35,6 +35,8 @@ export interface EngineContext {
   bonusSeparateAmounts: Record<string, number>
   /** 雇佣阶段划分，决定逐月发放金额口径 */
   stages: StageRange[]
+  /** 工资发放时间：次月发放时，发放月按上个月归属的阶段与金额计税 */
+  payTiming?: PayTiming
   /** 居民个人累计预扣；非居民个人按月单独计税且不享受专项附加扣除 */
   taxpayerType: TaxpayerType
   /** 每月减免税额（元），如残疾、孤老、烈属等减征政策 */
@@ -71,6 +73,8 @@ interface MonthIncome {
   nonCash: number
   /** 额外收入（劳务报酬/稿酬/特许权使用费）按次预扣的税额 */
   otherTax: number
+  /** 非居民个人额外收入按次以收入额适用月度税率表计算的税额 */
+  otherTaxNonResident: number
   /** 额外收入的汇算口径收入额，减除费用后（稿酬再减征 30%） */
   otherIncome: number
   /** 各收入项当月金额，key 为 IncomeItem.id */
@@ -88,6 +92,7 @@ function incomeOfMonth(
   bonusSeparateAmounts: Record<string, number>,
   stages: StageRange[],
   monthOverrides: Record<number, MonthOverride>,
+  isResident: boolean,
 ): MonthIncome {
   const enabled = incomes.filter((item) => item.enabled)
   const breakdown: Record<string, number> = {}
@@ -103,6 +108,7 @@ function incomeOfMonth(
     taxFree: 0,
     nonCash: 0,
     otherTax: 0,
+    otherTaxNonResident: 0,
     otherIncome: 0,
     breakdown,
     scores,
@@ -110,10 +116,13 @@ function incomeOfMonth(
   // 入职前与离职后均无收入
   if (month < startMonth || month > endMonth) return zero
 
-  const stage = stageTypeOfMonth(stages, month)
+  // 明细按「工资所属月」展示：本月行的阶段、金额、五险一金都取本月归属的数据。
+  // 发放时间（当月/次月）只影响到账提示，不改变每月应纳税所得与税额。
+  const workMonth = month
+  const stage = stageTypeOfMonth(stages, workMonth)
   // 分数是录入值，即使该阶段停发也保留展示，便于核对绩效评分
   enabled.forEach((item) => {
-    if (item.scoreBased) scores[item.id] = scoreOfMonth(item, month)
+    if (item.scoreBased) scores[item.id] = scoreOfMonth(item, workMonth)
   })
 
   let gross = 0
@@ -121,6 +130,7 @@ function incomeOfMonth(
   let taxFree = 0
   let nonCash = 0
   let otherTax = 0
+  let otherTaxNonResident = 0
   let otherIncome = 0
   const overrideAmounts = monthOverrides[month]?.amounts ?? {}
 
@@ -128,8 +138,9 @@ function incomeOfMonth(
     // 单月覆盖最具体，优先于阶段停发、逐月金额与阶段金额
     const overrideAmount = overrideAmounts[item.id]
     const monthlyAmount =
-      typeof overrideAmount === 'number' ? overrideAmount : amountOfMonth(item, month, stage)
-    const paid = item.cycle === 'monthly' ? monthlyAmount : item.month === month ? monthlyAmount : 0
+      typeof overrideAmount === 'number' ? overrideAmount : amountOfMonth(item, workMonth, stage)
+    // 一次性收入只在归属月出现：年终奖随所属月计入应发
+    const paid = item.cycle === 'monthly' ? monthlyAmount : month === item.month ? monthlyAmount : 0
     if (paid <= 0) return
     gross = round2(dec(gross).plus(paid))
     breakdown[item.id] = round2(dec(breakdown[item.id]).plus(paid))
@@ -140,10 +151,18 @@ function incomeOfMonth(
       return
     }
 
-    // 劳务报酬等额外收入按次预扣，不并入工资薪金累计预扣，汇算时才并入综合所得
+    // 劳务报酬等额外收入不并入工资薪金累计预扣：
+    // 居民个人按次预扣、汇算时并入综合所得；非居民个人按次以收入额适用月度税率表直接计税
     if (isOtherIncomeKind(item.kind)) {
-      otherTax = round2(dec(otherTax).plus(otherIncomeTax(item.kind, paid)))
-      otherIncome = round2(dec(otherIncome).plus(otherIncomeAmount(item.kind, paid)))
+      const incomeAmount = otherIncomeAmount(item.kind, paid)
+      if (isResident) {
+        otherTax = round2(dec(otherTax).plus(otherIncomeTax(item.kind, paid)))
+      } else {
+        otherTaxNonResident = round2(
+          dec(otherTaxNonResident).plus(taxByBrackets(MONTHLY_TAX_BRACKETS, incomeAmount)),
+        )
+      }
+      otherIncome = round2(dec(otherIncome).plus(incomeAmount))
       return
     }
 
@@ -159,6 +178,7 @@ function incomeOfMonth(
     taxFree,
     nonCash,
     otherTax,
+    otherTaxNonResident,
     otherIncome,
     breakdown,
     scores,
@@ -246,16 +266,17 @@ function bonusTaxOfMonth(
   monthOverrides: Record<number, MonthOverride>,
 ): number {
   if (month < startMonth || month > endMonth) return 0
-  const stage = stageTypeOfMonth(stages, month)
   const amount = sumMoney(
     incomes
       .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
+      // 奖金税与应发同月：明细按工资所属月展示
       .filter((item) => item.month === month)
       .map((item) => {
-        // 单月覆盖同样作用于奖金，保持与应发口径一致
+        const stage = stageTypeOfMonth(stages, item.month)
+        // 单月覆盖同样作用于奖金，保持与应发口径一致（覆盖记在发放月）
         const override = monthOverrides[month]?.amounts?.[item.id]
         const paid =
-          typeof override === 'number' ? override : amountOfMonth(item, month, stage)
+          typeof override === 'number' ? override : amountOfMonth(item, item.month, stage)
         return Math.min(bonusSeparateAmounts[item.id] ?? 0, paid)
       }),
   )
@@ -329,6 +350,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
 
   for (let month = 1; month <= 12; month += 1) {
     const employed = month >= ctx.startMonth && month <= ctx.endMonth
+    // 明细按工资所属月展示：本月行的工资与五险一金同属本月
     const insurance = ctx.insuranceMonthly[month - 1]
     const income = incomeOfMonth(
       ctx.incomes,
@@ -338,6 +360,7 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       ctx.bonusSeparateAmounts,
       ctx.stages,
       ctx.monthOverrides,
+      isResident,
     )
     const deductionTotal = isResident
       ? deductionOfMonth(ctx.deductions, month, ctx.startMonth, ctx.endMonth, false)
@@ -384,23 +407,22 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
       currentTax = currentTaxRaw > 0 ? currentTaxRaw : 0
       if (currentTax > 0) cumTaxPaid = round2(dec(cumTaxPaid).plus(currentTax))
     } else {
-      // 非居民个人以每月收入额减除费用后的余额为应纳税所得额，适用按月换算税率表
-      // 劳务报酬等额外收入按减除费用后的收入额并入当月
-      const monthlyTaxable = nonNegative(
+      // 非居民个人按月分项计税：工资薪金减除费用与五险一金后适用月度税率表，
+      // 劳务报酬/稿酬/特许权使用费按次以收入额为应纳税所得额单独计税，不扣减 5000 元费用
+      const wageTaxable = nonNegative(
         round2(
           dec(income.comprehensive)
-            .plus(income.otherIncome)
             .minus(insurance.personalTotal)
             .minus(basicDeduction),
         ),
       )
-      taxableIncome = monthlyTaxable
-      const raw = round2(
-        dec(taxByBrackets(MONTHLY_TAX_BRACKETS, monthlyTaxable)).minus(
+      taxableIncome = wageTaxable
+      const wageTaxRaw = round2(
+        dec(taxByBrackets(MONTHLY_TAX_BRACKETS, wageTaxable)).minus(
           employed ? ctx.taxReductionMonthly : 0,
         ),
       )
-      currentTax = raw > 0 ? raw : 0
+      currentTax = nonNegative(wageTaxRaw)
       cumTaxPaid = round2(dec(cumTaxPaid).plus(currentTax))
     }
 
@@ -415,8 +437,8 @@ export function runMonthlyEngine(ctx: EngineContext): EngineResult {
           ctx.monthOverrides,
         )
       : 0
-    // 非居民个人的额外收入已并入当月应纳税所得额统一计税，不能再叠加按次预扣税
-    const otherPrepaid = isResident ? income.otherTax : 0
+    // 额外收入的税额：居民为按次预扣额，非居民为按次以收入额直接计税的税额
+    const otherPrepaid = isResident ? income.otherTax : income.otherTaxNonResident
     const taxTotal = round2(dec(currentTax).plus(bonusTax).plus(otherPrepaid))
     // 税后扣款只减少到手，不进入应纳税所得额
     const postTax = postTaxDeductionOfMonth(

@@ -8,7 +8,7 @@ import { computed, ref } from 'vue'
 import { createDefaultIncomes, createDefaultPostTaxDeductions } from '@/config/presets'
 import { DEDUCTION_CATALOG, DEDUCTION_LIST } from '@/config/specialDeductions'
 import { createDefaultStages, createStage } from '@/config/stages'
-import { amountOfMonth, OTHER_INCOME_LABELS, round2, stageTypeOfMonth } from '@/core'
+import { amountOfMonth, OTHER_INCOME_LABELS, paidAmountOfItem, round2, stageTypeOfMonth } from '@/core'
 import { createId } from '@/utils/id'
 import { INSURANCE_TYPES } from '@/types'
 import type {
@@ -71,11 +71,11 @@ export function createDefaultInsurance(): InsuranceConfig {
   return {
     cityCode: 'beijing',
     baseMode: 'gross',
-    manualBase: 15000,
+    manualBase: 0,
     clampEnabled: true,
     // 公积金基数默认与社保基数一致，用户可切换为独立口径
     housingFundBaseMode: 'same',
-    housingFundManualBase: 15000,
+    housingFundManualBase: 0,
     housingFundClampEnabled: true,
     // 大病医疗固定额各地不一，默认不叠加，避免医保个人额与「基数 × 费率」对不上
     medicalFixed: 0,
@@ -112,11 +112,14 @@ export const useSalaryStore = defineStore(
     /** 已启用的收入项，表格动态列以此为数据源 */
     const activeIncomes = computed(() => incomes.value.filter((item) => item.enabled))
 
-    /** 年终奖合计，用于计税方式建议 */
+    /** 年终奖合计，用于计税方式建议；按归属月实际金额统计（阶段金额与单月覆盖优先于基础金额） */
     const bonusTotal = computed(() =>
       incomes.value
-        .filter((item) => item.enabled && item.kind === 'bonus')
-        .reduce((acc, item) => acc + item.amount, 0),
+        .filter((item) => item.enabled && item.kind === 'bonus' && item.cycle === 'once')
+        .reduce(
+          (acc, item) => acc + paidAmountOfItem(item, stages.value, monthOverrides.value),
+          0,
+        ),
     )
 
     function addIncome(kind: IncomeKind = 'salary'): IncomeItem {
@@ -543,6 +546,7 @@ export const useSalaryStore = defineStore(
         postTaxDeductions: JSON.parse(
           JSON.stringify(postTaxDeductions.value),
         ) as PostTaxDeductionItem[],
+        schemes: JSON.parse(JSON.stringify(schemes.value)) as SalaryScheme[],
       }
     }
 
@@ -553,6 +557,7 @@ export const useSalaryStore = defineStore(
       stages?: StageRange[]
       monthOverrides?: Record<number, MonthOverride>
       postTaxDeductions?: PostTaxDeductionItem[]
+      schemes?: SalaryScheme[]
     }) {
       if (Array.isArray(payload.incomes)) incomes.value = normalizeIncomes(payload.incomes)
       if (payload.insurance) insurance.value = { ...createDefaultInsurance(), ...payload.insurance }
@@ -565,6 +570,16 @@ export const useSalaryStore = defineStore(
       }
       if (Array.isArray(payload.postTaxDeductions)) {
         postTaxDeductions.value = normalizePostTaxDeductions(payload.postTaxDeductions)
+      }
+      if (Array.isArray(payload.schemes)) {
+        // 存档迁移：只接收结构完整的方案，避免旧版本或损坏数据进入列表
+        schemes.value = payload.schemes.filter(
+          (scheme) =>
+            scheme &&
+            typeof scheme.id === 'string' &&
+            typeof scheme.name === 'string' &&
+            Array.isArray(scheme.incomes),
+        )
       }
     }
 

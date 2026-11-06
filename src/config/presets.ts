@@ -143,40 +143,39 @@ export function createDefaultPostTaxDeductions(): PostTaxDeductionItem[] {
   ]
 }
 
-/** 默认收入项：覆盖最常见的薪酬结构，用户可自由增删 */
+/** 默认收入项：覆盖最常见的薪酬结构，初始金额一律为 0，由用户填入真实数据 */
 export function createDefaultIncomes(): IncomeItem[] {
   return [
     {
       id: 'base_salary',
       name: '基本工资',
-      amount: 15000,
+      amount: 0,
       cycle: 'monthly',
       month: 1,
       intoInsuranceBase: true,
       taxable: true,
       kind: 'salary',
       enabled: true,
-      // 默认开启阶段差异，直观演示实习期/试用期工资低于转正后的场景
-      staged: true,
-      stageAmounts: { intern: 8000, probation: 12000, regular: 15000 },
-      stageEnabled: { intern: true, probation: true, regular: true },
+      // 阶段差异默认关闭，用户有实习/试用期时再打开并逐段填写
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
       nonCash: false,
       variableByMonth: false,
     },
     {
       id: 'performance',
       name: '绩效工资',
-      amount: 3000,
+      amount: 0,
       cycle: 'monthly',
       month: 1,
       intoInsuranceBase: true,
       taxable: true,
       kind: 'salary',
       enabled: true,
-      // 绩效属激励性薪酬，默认仅转正后发放
-      staged: true,
-      stageAmounts: { intern: 3000, probation: 1500, regular: 3000 },
-      stageEnabled: { intern: false, probation: false, regular: true },
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
       nonCash: false,
       variableByMonth: false,
     },
@@ -184,7 +183,7 @@ export function createDefaultIncomes(): IncomeItem[] {
       id: 'allowance',
       // 饭票只能在食堂消费：计入应发与应税，但员工拿不到现金，故不计入到手
       name: '餐补（饭票）',
-      amount: 800,
+      amount: 0,
       cycle: 'monthly',
       month: 1,
       intoInsuranceBase: false,
@@ -192,18 +191,16 @@ export function createDefaultIncomes(): IncomeItem[] {
       kind: 'salary',
       enabled: true,
       nonCash: true,
-      // 饭票按当月出勤/消费浮动，各月金额不同
-      variableByMonth: true,
-      monthlyAmounts: [680, 720, 760, 740, 800, 820, 780, 860, 740, 800, 760, 840],
-      // 实习期通常不含福利补贴；阶段停发优先于逐月金额
-      staged: true,
-      stageAmounts: { intern: 800, probation: 400, regular: 800 },
-      stageEnabled: { intern: false, probation: true, regular: true },
+      // 各月金额不同时打开「逐月发放」再逐月填写
+      variableByMonth: false,
+      staged: false,
+      stageAmounts: {},
+      stageEnabled: {},
     },
     {
       id: 'year_end_bonus',
       name: '年终奖',
-      amount: 30000,
+      amount: 0,
       cycle: 'once',
       month: 1,
       intoInsuranceBase: false,

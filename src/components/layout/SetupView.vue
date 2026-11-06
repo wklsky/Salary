@@ -11,6 +11,7 @@ import SectionPanel from '@/components/common/SectionPanel.vue'
 import AdvancedForm from '@/components/setup/AdvancedForm.vue'
 import PeriodForm from '@/components/setup/PeriodForm.vue'
 import PayslipCard from '@/components/setup/PayslipCard.vue'
+import TargetReverseCard from '@/components/setup/TargetReverseCard.vue'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
 import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEditor.vue'
 import IncomeEditor from '@/components/income/IncomeEditor.vue'
@@ -126,6 +127,7 @@ function goToSection(item: NavItem | undefined) {
         </nav>
         <!-- 窄屏时结果卡落不进右栏，改在目录条下方放一张横向紧凑版，保证录入时看得到结果 -->
         <PayslipCard v-if="isCompact" compact @next="emit('next')" />
+        <TargetReverseCard v-if="isCompact" />
         <SectionPanel
           v-if="section === 'period'"
           index="01"
@@ -209,6 +211,7 @@ function goToSection(item: NavItem | undefined) {
 
       <aside v-if="!isCompact" class="setup__aside" aria-label="实时结果">
         <PayslipCard @next="emit('next')" />
+        <TargetReverseCard />
       </aside>
     </div>
   </section>
@@ -238,6 +241,9 @@ function goToSection(item: NavItem | undefined) {
 .setup__aside {
   position: sticky;
   top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 /* 窗口较窄时右侧结果卡不存在，主表单独占一行 */

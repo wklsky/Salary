@@ -90,6 +90,8 @@ export function useTableEditing() {
       monthOverrides,
       customColumns: schemaStore.customColumnItems,
       postTaxDeductions: salaryStore.postTaxDeductions,
+      customCities: settingsStore.customCities,
+      payTiming: settingsStore.payTiming,
     }
   }
 

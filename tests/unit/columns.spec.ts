@@ -17,6 +17,7 @@ import type {
 const PERSONAL: InsuranceAmountMap = {
   pension: 800,
   medical: 200,
+  largeMedical: 0,
   unemployment: 50,
   injury: 0,
   maternity: 0,
@@ -26,6 +27,7 @@ const PERSONAL: InsuranceAmountMap = {
 const COMPANY: InsuranceAmountMap = {
   pension: 1600,
   medical: 900,
+  largeMedical: 75,
   unemployment: 50,
   injury: 40,
   maternity: 0,
@@ -39,7 +41,7 @@ const detail: InsuranceMonthDetail = {
   personal: PERSONAL,
   company: COMPANY,
   personalTotal: 1750,
-  companyTotal: 3290,
+  companyTotal: 3365,
 }
 
 /** 险种列只依赖 insurance 明细，行数据给最小占位即可 */

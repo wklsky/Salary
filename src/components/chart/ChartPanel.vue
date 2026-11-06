@@ -16,6 +16,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 import { INSURANCE_LABELS } from '@/config/columns'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 
 interface Props {
   /** 渲染哪些图表：trend 趋势 / structure 收入去向 / insurance 五险一金 / all 全部 */
@@ -30,11 +31,15 @@ const props = withDefaults(defineProps<Props>(), {
 use([CanvasRenderer, BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent])
 
 const { result } = useSalaryCalculator()
+const settingsStore = useSettingsStore()
+
+/** 深色模式下图表要换成浅色文字与深色分隔线，否则在深底上看不清 */
+const isDark = computed(() => settingsStore.theme === 'dark')
 
 const months = computed(() => result.value.monthly.map((item) => `${item.month} 月`))
 
 /* 图表配色：与全局「墨蓝 + 玉石绿 + 琥珀」一致，不再用 Element 默认蓝红 */
-const CHART = {
+const PALETTE_LIGHT = {
   ink: '#16233a',
   jade: '#0f766e',
   slate: '#8fa3ba',
@@ -43,91 +48,111 @@ const CHART = {
   text: '#64748b',
   line: '#dfe6ee',
   lineStrong: '#c9d4e0',
+  tooltipBg: '#ffffff',
+  tooltipShadow: '0 12px 32px -12px rgb(22 35 58 / 18%)',
 } as const
 
-const baseTooltip = {
-  backgroundColor: '#fff',
-  borderColor: CHART.lineStrong,
+const PALETTE_DARK = {
+  ink: '#e6eef8',
+  jade: '#2bb3a5',
+  slate: '#8fa3ba',
+  slateDark: '#5b6d86',
+  amber: '#e9a23b',
+  text: '#93a3b5',
+  line: '#273449',
+  lineStrong: '#35455e',
+  tooltipBg: '#1a2435',
+  tooltipShadow: '0 12px 32px -12px rgb(0 0 0 / 55%)',
+} as const
+
+const chart = computed(() => (isDark.value ? PALETTE_DARK : PALETTE_LIGHT))
+
+const baseTooltip = computed(() => ({
+  backgroundColor: chart.value.tooltipBg,
+  borderColor: chart.value.lineStrong,
   borderWidth: 1,
   padding: [8, 12] as [number, number],
-  textStyle: { color: CHART.ink, fontSize: 12 },
-  extraCssText: 'box-shadow: 0 12px 32px -12px rgb(22 35 58 / 18%); border-radius: 8px;',
-}
+  textStyle: { color: chart.value.ink, fontSize: 12 },
+  extraCssText: `box-shadow: ${chart.value.tooltipShadow}; border-radius: 8px;`,
+}))
 
-const baseLegend = {
+const baseLegend = computed(() => ({
   itemWidth: 10,
   itemHeight: 10,
   itemGap: 16,
-  textStyle: { color: CHART.text, fontSize: 12 },
-}
-
-const trendOption = computed(() => ({
-  color: [CHART.slate, CHART.jade, CHART.amber],
-  tooltip: {
-    ...baseTooltip,
-    trigger: 'axis',
-    valueFormatter: (value: unknown) => `¥${Number(value).toLocaleString('zh-CN')}`,
-  },
-  legend: { ...baseLegend, data: ['应发', '到手', '个税'] },
-  grid: { left: 64, right: 24, top: 44, bottom: 28 },
-  xAxis: {
-    type: 'category',
-    data: months.value,
-    axisTick: { show: false },
-    axisLine: { lineStyle: { color: CHART.lineStrong } },
-    axisLabel: { color: CHART.text, fontSize: 11 },
-  },
-  yAxis: {
-    type: 'value',
-    name: '元',
-    axisLabel: { color: CHART.text, fontSize: 11 },
-    splitLine: { lineStyle: { color: CHART.line } },
-  },
-  series: [
-    {
-      name: '应发',
-      type: 'bar',
-      barMaxWidth: 26,
-      itemStyle: { color: CHART.slate, borderRadius: [4, 4, 0, 0] },
-      data: result.value.monthly.map((item) => item.gross),
-    },
-    {
-      name: '到手',
-      type: 'bar',
-      barMaxWidth: 26,
-      itemStyle: { color: CHART.jade, borderRadius: [4, 4, 0, 0] },
-      data: result.value.monthly.map((item) => item.net),
-    },
-    {
-      name: '个税',
-      type: 'line',
-      smooth: true,
-      symbolSize: 6,
-      itemStyle: { color: CHART.amber },
-      lineStyle: { width: 2.5 },
-      areaStyle: { color: CHART.amber, opacity: 0.12 },
-      data: result.value.monthly.map((item) => item.taxTotal),
-    },
-  ],
+  textStyle: { color: chart.value.text, fontSize: 12 },
 }))
 
-/* 与结算卡组成条同一套段色，图表与卡片可以互相印证 */
-const SEGMENT_COLORS = [CHART.jade, CHART.slate, CHART.amber, CHART.slateDark]
-
-const structureOption = computed(() => {
-  const annual = result.value.annual
+const trendOption = computed(() => {
+  const c = chart.value
   return {
-    color: SEGMENT_COLORS,
-    tooltip: { ...baseTooltip, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { ...baseLegend, bottom: 0 },
+    color: [c.slate, c.jade, c.amber],
+    tooltip: {
+      ...baseTooltip.value,
+      trigger: 'axis',
+      valueFormatter: (value: unknown) => `¥${Number(value).toLocaleString('zh-CN')}`,
+    },
+    legend: { ...baseLegend.value, data: ['应发', '到手', '个税'] },
+    grid: { left: 64, right: 24, top: 44, bottom: 28 },
+    xAxis: {
+      type: 'category',
+      data: months.value,
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: c.lineStrong } },
+      axisLabel: { color: c.text, fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value',
+      name: '元',
+      axisLabel: { color: c.text, fontSize: 11 },
+      splitLine: { lineStyle: { color: c.line } },
+    },
+    series: [
+      {
+        name: '应发',
+        type: 'bar',
+        barMaxWidth: 26,
+        itemStyle: { color: c.slate, borderRadius: [4, 4, 0, 0] },
+        data: result.value.monthly.map((item) => item.gross),
+      },
+      {
+        name: '到手',
+        type: 'bar',
+        barMaxWidth: 26,
+        itemStyle: { color: c.jade, borderRadius: [4, 4, 0, 0] },
+        data: result.value.monthly.map((item) => item.net),
+      },
+      {
+        name: '个税',
+        type: 'line',
+        smooth: true,
+        symbolSize: 6,
+        itemStyle: { color: c.amber },
+        lineStyle: { width: 2.5 },
+        areaStyle: { color: c.amber, opacity: 0.12 },
+        data: result.value.monthly.map((item) => item.taxTotal),
+      },
+    ],
+  }
+})
+
+/* 与结算卡组成条同一套段色，图表与卡片可以互相印证 */
+const structureOption = computed(() => {
+  const c = chart.value
+  const annual = result.value.annual
+  const segmentColors = [c.jade, c.slate, c.amber, c.slateDark]
+  return {
+    color: segmentColors,
+    tooltip: { ...baseTooltip.value, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { ...baseLegend.value, bottom: 0 },
     series: [
       {
         type: 'pie',
         radius: ['45%', '70%'],
         avoidLabelOverlap: true,
-        label: { formatter: '{b}\n{d}%', color: CHART.text, fontSize: 11 },
-        labelLine: { lineStyle: { color: CHART.lineStrong } },
-        emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(22, 35, 58, 0.28)' } },
+        label: { formatter: '{b}\n{d}%', color: c.text, fontSize: 11 },
+        labelLine: { lineStyle: { color: c.lineStrong } },
+        emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0, 0, 0, 0.28)' } },
         // 非现金收入含在应发中但不计入到手，单列一片才能让饼图合计等于应发
         data: [
           { name: '到手工资', value: annual.net },
@@ -145,22 +170,25 @@ const structureOption = computed(() => {
 /* 五险一金用玉绿阶梯 + 琥珀公积金，与主色一致 */
 const INSURANCE_COLORS = ['#0f766e', '#4f9a93', '#87bcb6', '#b9d8d4', '#8fa3ba', '#e9a23b']
 
-const insuranceOption = computed(() => ({
-  color: INSURANCE_COLORS,
-  tooltip: { ...baseTooltip, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-  legend: { ...baseLegend, bottom: 0 },
-  series: [
-    {
-      type: 'pie',
-      radius: '65%',
-      label: { formatter: '{b}\n{d}%', color: CHART.text, fontSize: 11 },
-      labelLine: { lineStyle: { color: CHART.lineStrong } },
-      data: result.value.insuranceAnnual
-        .filter((item) => item.personal > 0)
-        .map((item) => ({ name: INSURANCE_LABELS[item.type], value: item.personal })),
-    },
-  ],
-}))
+const insuranceOption = computed(() => {
+  const c = chart.value
+  return {
+    color: INSURANCE_COLORS,
+    tooltip: { ...baseTooltip.value, trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { ...baseLegend.value, bottom: 0 },
+    series: [
+      {
+        type: 'pie',
+        radius: '65%',
+        label: { formatter: '{b}\n{d}%', color: c.text, fontSize: 11 },
+        labelLine: { lineStyle: { color: c.lineStrong } },
+        data: result.value.insuranceAnnual
+          .filter((item) => item.personal > 0)
+          .map((item) => ({ name: INSURANCE_LABELS[item.type], value: item.personal })),
+      },
+    ],
+  }
+})
 </script>
 
 <template>

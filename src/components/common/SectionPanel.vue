@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * @Author: wj
  * @FilePath: src/components/common/SectionPanel.vue
@@ -61,7 +61,7 @@ const props = withDefaults(defineProps<Props>(), {
   padding: 0 2px 0 0;
   color: var(--app-ink-900);
   font-family: var(--app-font-ledger);
-  font-size: 28px;
+  font-size: var(--app-display);
   font-weight: 400;
   line-height: 0.95;
   letter-spacing: -0.03em;
@@ -75,14 +75,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 .section-panel__title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--app-text-lg);
   font-weight: 700;
   color: var(--app-ink-900);
 }
 
 .section-panel__desc {
   margin: 3px 0 0;
-  font-size: 13px;
+  font-size: var(--app-text-base);
   line-height: 1.55;
   color: var(--app-ink-500);
 }
@@ -93,8 +93,8 @@ const props = withDefaults(defineProps<Props>(), {
   border: 1px solid var(--app-line);
   border-radius: 999px;
   color: var(--app-ink-700);
-  background: #f5f8fb;
-  font-size: 12px;
+  background: var(--app-sunken-2);
+  font-size: var(--app-text-sm);
   white-space: nowrap;
 }
 

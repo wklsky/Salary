@@ -24,9 +24,27 @@
   --app-rose-600: #b42318;
   --app-rose-100: #fdecea;
 
+  /* 次级底色：浅色下几乎看不出的冷灰面板，深色下单独指定 */
+  --app-sunken: #f7f9fc;
+  --app-sunken-2: #f5f8fb;
+  --app-warn-bg: #fffaf2;
+  --app-warn-border: #f3e2c8;
+  --app-table-head: #fbfcfe;
+  --app-scrollbar: #c3cfdd;
+  --app-focus-ring: rgb(15 118 110 / 13%);
+
   --app-radius-sm: 6px;
   --app-radius-md: 10px;
   --app-radius-lg: 14px;
+
+  /* 排版阶梯：正文 14，说明 13/12，页眉标题 16，账本序号 28 */
+  --app-text-xs: 11px;
+  --app-text-sm: 12px;
+  --app-text-base: 13px;
+  --app-text-md: 14px;
+  --app-text-lg: 16px;
+  --app-text-xl: 20px;
+  --app-display: 28px;
   --app-shadow-sm: 0 1px 2px rgb(22 35 58 / 5%);
   --app-shadow-md: 0 14px 40px -24px rgb(22 35 58 / 35%);
 
@@ -142,6 +160,129 @@
   --el-font-family: var(--app-font-sans);
 }
 
+/* 深色主题：由 useTheme 写在 <html data-theme="dark"> 上，所有组件只读语义变量 */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --app-ink-900: #e6eef8;
+  --app-ink-700: #c3cfdd;
+  --app-ink-500: #93a3b5;
+  --app-ink-300: #6b7c90;
+  --app-paper: #0e1623;
+  --app-surface: #172131;
+  --app-line: #273449;
+  --app-line-strong: #35455e;
+  --app-jade-700: #7dd3c7;
+  --app-jade-600: #16998f;
+  --app-jade-100: #14312f;
+  --app-amber-700: #e9a23b;
+  --app-amber-600: #d99022;
+  --app-amber-100: #33260f;
+  --app-rose-600: #e07a72;
+  --app-rose-100: #3a1f1e;
+
+  --app-sunken: #1b2637;
+  --app-sunken-2: #1f2b3d;
+  --app-warn-bg: #2a2113;
+  --app-warn-border: #4a3a1c;
+  --app-table-head: #1b2637;
+  --app-scrollbar: #35455e;
+  --app-focus-ring: rgb(125 211 199 / 18%);
+
+  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --app-shadow-md: 0 14px 40px -24px rgb(0 0 0 / 70%);
+
+  --el-color-primary: #16998f;
+  --el-color-primary-light-3: #3fb0a5;
+  --el-color-primary-light-5: #69c2b8;
+  --el-color-primary-light-7: #9bd6cf;
+  --el-color-primary-light-8: #b6e2dd;
+  --el-color-primary-light-9: #12312e;
+  --el-color-primary-dark-2: #0f766e;
+
+  --el-color-warning: #d99022;
+  --el-color-warning-light-3: #b47a24;
+  --el-color-warning-light-5: #8f6221;
+  --el-color-warning-light-7: #4a3a1c;
+  --el-color-warning-light-8: #3a2d16;
+  --el-color-warning-light-9: #2a2113;
+  --el-color-warning-dark-2: #e9a23b;
+
+  --el-color-danger: #e07a72;
+  --el-color-danger-light-3: #b5635d;
+  --el-color-danger-light-5: #8a4d49;
+  --el-color-danger-light-7: #5a3230;
+  --el-color-danger-light-8: #462726;
+  --el-color-danger-light-9: #3a1f1e;
+  --el-color-danger-dark-2: #f09a92;
+
+  --el-color-info: #93a3b5;
+  --el-color-info-light-3: #7b8b9d;
+  --el-color-info-light-5: #637485;
+  --el-color-info-light-7: #3c4b5e;
+  --el-color-info-light-8: #31405a;
+  --el-color-info-light-9: #263346;
+  --el-color-info-dark-2: #b3c0cf;
+
+  --el-text-color-primary: var(--app-ink-900);
+  --el-text-color-regular: var(--app-ink-700);
+  --el-text-color-secondary: var(--app-ink-500);
+  --el-text-color-placeholder: #5f7085;
+  --el-text-color-disabled: #4a5a6d;
+
+  --el-border-color: var(--app-line);
+  --el-border-color-light: #2c3a52;
+  --el-border-color-lighter: #31405a;
+  --el-border-color-extra-light: #364459;
+  --el-border-color-dark: var(--app-line-strong);
+  --el-border-color-darker: #45566f;
+  --el-border-color-hover: #2bb3a5;
+
+  --el-fill-color: #1b2637;
+  --el-fill-color-light: #1f2b3d;
+  --el-fill-color-lighter: #232f42;
+  --el-fill-color-extra-light: #263346;
+  --el-fill-color-dark: #16202f;
+  --el-fill-color-darker: #121b28;
+  --el-fill-color-blank: var(--app-surface);
+  --el-bg-color: var(--app-surface);
+  --el-bg-color-page: var(--app-paper);
+  --el-bg-color-overlay: #1a2435;
+
+  --el-disabled-bg-color: #1b2637;
+  --el-disabled-text-color: #5f7085;
+  --el-disabled-border-color: #2c3a52;
+
+  --el-mask-color: rgb(0 0 0 / 60%);
+  --el-mask-color-extra-light: rgb(0 0 0 / 30%);
+  --el-box-shadow: 0 12px 32px -12px rgb(0 0 0 / 60%);
+  --el-box-shadow-light: 0 6px 20px -8px rgb(0 0 0 / 45%);
+  --el-box-shadow-lighter: 0 4px 14px -8px rgb(0 0 0 / 40%);
+  --el-box-shadow-dark: 0 18px 48px -20px rgb(0 0 0 / 70%);
+
+  --el-card-bg-color: var(--app-surface);
+  --el-input-bg-color: var(--app-surface);
+  --el-table-bg-color: var(--app-surface);
+  --el-table-tr-bg-color: var(--app-surface);
+  --el-table-header-bg-color: var(--app-table-head);
+  --el-table-header-text-color: var(--app-ink-700);
+  --el-table-row-hover-bg-color: var(--app-jade-100);
+  --el-table-border-color: var(--app-line);
+}
+
+:root[data-theme='dark'] ::selection {
+  color: #0e1623;
+  background: #7dd3c7;
+}
+
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #35455e;
+}
+
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background-color: #2bb3a5;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -240,7 +381,7 @@ strong,
 .el-select .el-select__wrapper.is-focused {
   box-shadow:
     0 0 0 1px var(--app-jade-600) inset,
-    0 0 0 3px rgb(15 118 110 / 13%);
+    0 0 0 3px var(--app-focus-ring);
 }
 
 /* 数字输入右对齐，金额按账本习惯靠右对齐更易读 */
@@ -250,7 +391,7 @@ strong,
 
 .el-table {
   --el-table-border-color: var(--app-line);
-  --el-table-header-bg-color: #f7f9fc;
+  --el-table-header-bg-color: var(--app-table-head);
   --el-table-header-text-color: var(--app-ink-700);
   --el-table-row-hover-bg-color: var(--app-jade-100);
 }
@@ -266,7 +407,7 @@ strong,
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #c3cfdd;
+  background: var(--app-scrollbar);
   background-clip: padding-box;
   border: 3px solid transparent;
   border-radius: 8px;
@@ -278,11 +419,46 @@ strong,
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #c3cfdd transparent;
+  scrollbar-color: var(--app-scrollbar) transparent;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+/* 打印：只留正文账本，导航、分页与图表全部隐藏，卡片尽量不跨页截断 */
+@media print {
+  body {
+    overflow: visible;
+    background: #fff;
+  }
+
+  .app,
+  .app__main,
+  .app__body {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app__sidebar-wrap,
+  .app__navbar,
+  .app__footer,
+  .page-pager,
+  .table-view__actions,
+  .chart-panel {
+    display: none !important;
+  }
+
+  .app__body {
+    padding: 0;
+  }
+
+  .el-card,
+  .table-view__insights {
+    box-shadow: none;
+    break-inside: avoid;
   }
 }

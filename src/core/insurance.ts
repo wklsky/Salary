@@ -20,15 +20,23 @@ import { INSURANCE_TYPES } from '@/types'
 import { amountOfMonth, skippedInsuranceTypesOfMonth, stageTypeOfMonth } from './stage'
 import { clampNumber, dec, round0, round2, sumMoney } from './money'
 
-/** 城市政策查找：未命中时使用兜底政策，保证计算不中断 */
-export function resolveCity(code: string): CityPolicy {
-  return CITIES.find((city) => city.code === code) ?? DEFAULT_CITY
+/**
+ * 城市政策查找：优先用户自定义城市，其次内置城市，最后兜底政策
+ * 自定义城市允许覆盖同名内置城市，便于政策更新前先行自测
+ */
+export function resolveCity(code: string, customCities: CityPolicy[] = []): CityPolicy {
+  return (
+    customCities.find((city) => city.code === code) ??
+    CITIES.find((city) => city.code === code) ??
+    DEFAULT_CITY
+  )
 }
 
 export function emptyAmountMap(): InsuranceAmountMap {
   return {
     pension: 0,
     medical: 0,
+    largeMedical: 0,
     unemployment: 0,
     injury: 0,
     maternity: 0,
@@ -133,10 +141,12 @@ export interface ComputeInsuranceParams {
   stages: StageRange[]
   /** 单月数据覆盖，可单独核定某月缴费基数 */
   monthOverrides?: Record<number, MonthOverride>
+  /** 用户自定义城市政策，优先于内置城市 */
+  customCities?: CityPolicy[]
 }
 
 export function computeInsuranceMonthly(params: ComputeInsuranceParams): InsuranceMonthDetail[] {
-  const city = resolveCity(params.insurance.cityCode)
+  const city = resolveCity(params.insurance.cityCode, params.customCities ?? [])
   const socialRange = city.base
   const housingRange = resolveHousingFundRange(city)
 
@@ -170,15 +180,33 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
         ? overrideHousingBase
         : resolveHousingFundRawBase(params.insurance, city, baseIncome, rawBase)
 
-    const base = params.insurance.clampEnabled
-      ? clampNumber(rawBase, socialRange.lower, socialRange.upper)
-      : rawBase
-    const autoBase = params.insurance.clampEnabled
-      ? clampNumber(autoRawBase, socialRange.lower, socialRange.upper)
-      : autoRawBase
-    const housingFundBase = params.insurance.housingFundClampEnabled
-      ? clampNumber(housingRawBase, housingRange.lower, housingRange.upper)
-      : housingRawBase
+    // 当月是否有任何收入（含不计入缴费基数的项）
+    // 有收入时零基数仍按下限托底；完全没有收入时不产生缴纳，避免初始化出现负数到手
+    const monthlyIncomePresence = sumMoney(
+      params.incomes
+        .filter((item) => item.enabled && item.cycle === 'monthly')
+        .map((item) => amountOfMonth(item, month, stage)),
+    )
+    const onceIncomePresence = sumMoney(
+      params.incomes
+        .filter((item) => item.enabled && item.cycle === 'once')
+        .map((item) => amountOfMonth(item, item.month, stageTypeOfMonth(params.stages, item.month))),
+    )
+    const hasIncome = monthlyIncomePresence > 0 || onceIncomePresence > 0
+
+    // 未填写任何收入时基数为 0，不应被下限「托底」成仍在缴社保
+    const base =
+      params.insurance.clampEnabled && hasIncome
+        ? clampNumber(rawBase, socialRange.lower, socialRange.upper)
+        : rawBase
+    const autoBase =
+      params.insurance.clampEnabled && hasIncome
+        ? clampNumber(autoRawBase, socialRange.lower, socialRange.upper)
+        : autoRawBase
+    const housingFundBase =
+      params.insurance.housingFundClampEnabled && hasIncome
+        ? clampNumber(housingRawBase, housingRange.lower, housingRange.upper)
+        : housingRawBase
 
     const personal = emptyAmountMap()
     const company = emptyAmountMap()
@@ -199,8 +227,9 @@ export function computeInsuranceMonthly(params: ComputeInsuranceParams): Insuran
       company[type] = round(dec(applyBase).mul(rate.company))
 
       // 大病医疗固定额由个人承担，叠加在医疗个人部分；未填写则不计入
+      // 当月没有任何收入时不叠加，避免无收入月份凭空产生扣款（到手为负）
       const medicalFixed = params.insurance.medicalFixed ?? 0
-      if (type === 'medical' && medicalFixed > 0) {
+      if (type === 'medical' && medicalFixed > 0 && hasIncome) {
         personal[type] = round2(dec(personal[type]).plus(medicalFixed))
       }
     })

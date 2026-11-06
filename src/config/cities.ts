@@ -16,6 +16,8 @@ export const DEFAULT_CITY: CityPolicy = {
   rates: {
     pension: { personal: 0.08, company: 0.16 },
     medical: { personal: 0.02, company: 0.098 },
+    // 大额医疗费用补助由地方单独征收，未单列的城市按 0 处理
+    largeMedical: null,
     unemployment: { personal: 0.005, company: 0.005 },
     injury: { personal: 0, company: 0.004 },
     // 生育保险已并入医疗保险统一征收，故不再单独列示
@@ -26,7 +28,7 @@ export const DEFAULT_CITY: CityPolicy = {
   referenceYear: 2025,
 }
 
-/** 构造险种费率，避免每个城市重复书写六个对象 */
+/** 构造险种费率，避免每个城市重复书写对象 */
 function rates(
   pension: RatePair,
   medical: RatePair,
@@ -35,7 +37,16 @@ function rates(
   housingFund: RatePair,
   maternity: RatePair | null = null,
 ): CityPolicy['rates'] {
-  return { pension, medical, unemployment, injury, maternity, housingFund }
+  return {
+    pension,
+    medical,
+    // 大额医疗费用补助为地区性险种，默认不单列，由城市单独覆盖
+    largeMedical: null,
+    unemployment,
+    injury,
+    maternity,
+    housingFund,
+  }
 }
 
 export const CITIES: CityPolicy[] = [
@@ -44,13 +55,17 @@ export const CITIES: CityPolicy[] = [
     name: '北京',
     base: { lower: 6821, upper: 35283 },
     housingFundBase: { lower: 2420, upper: 35283 },
-    rates: rates(
-      { personal: 0.08, company: 0.16 },
-      { personal: 0.02, company: 0.09 },
-      { personal: 0.005, company: 0.005 },
-      { personal: 0, company: 0.004 },
-      { personal: 0.12, company: 0.12 },
-    ),
+    rates: {
+      ...rates(
+        { personal: 0.08, company: 0.16 },
+        { personal: 0.02, company: 0.09 },
+        { personal: 0.005, company: 0.005 },
+        { personal: 0, company: 0.004 },
+        { personal: 0.12, company: 0.12 },
+      ),
+      // 北京大额医疗费用补助：单位按缴费基数 0.75% 缴纳，个人不缴
+      largeMedical: { personal: 0, company: 0.0075 },
+    },
     medicalFixed: 3,
     referenceYear: 2025,
   },

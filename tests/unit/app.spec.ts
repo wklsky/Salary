@@ -101,7 +101,7 @@ describe('应用挂载冒烟', () => {
     expect(wrapper.text()).not.toContain('NaN')
   })
 
-  it('默认示例数据产出合理的计算结果', () => {
+  it('默认初始化数据全部为 0，不预填演示金额', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     mount(App, { global: { plugins: [pinia, ElementPlus] } })
@@ -110,15 +110,12 @@ describe('应用挂载冒烟', () => {
     const annual = result.value.annual
 
     expect(result.value.monthly).toHaveLength(12)
-    expect(annual.gross).toBeGreaterThan(0)
-    expect(annual.net).toBeGreaterThan(0)
-    expect(annual.net).toBeLessThan(annual.gross)
-    expect(annual.companyCost).toBeGreaterThan(annual.gross)
-    // 到手 + 个人社保 + 个税 + 非现金福利（饭票等）应恒等于应发
-    expect(
-      annual.net + annual.insurancePersonal + annual.tax + annual.nonCashIncome,
-    ).toBeCloseTo(annual.gross, 1)
-    // 默认示例含餐补饭票，验证非现金福利确实被排除在到手之外
-    expect(annual.nonCashIncome).toBeGreaterThan(0)
+    // 初始化不预填任何收入与社保，所有金额都应是 0 且为有限值
+    expect(annual.gross).toBe(0)
+    expect(annual.net).toBe(0)
+    expect(annual.tax).toBe(0)
+    expect(annual.insurancePersonal).toBe(0)
+    expect(annual.nonCashIncome).toBe(0)
+    expect(Number.isFinite(annual.net)).toBe(true)
   })
 })

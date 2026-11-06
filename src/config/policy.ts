@@ -16,6 +16,9 @@ export const BASIC_DEDUCTION_MONTHLY = 5000
 /** 全年一次性奖金单独计税政策有效期截止日，过期后 UI 需提示 */
 export const BONUS_SEPARATE_VALID_UNTIL = '2027-12-31'
 
+/** 年终奖单独计税政策最后适用的纳税年度，次年自动降级为并入综合所得 */
+export const BONUS_SEPARATE_POLICY_END_YEAR = 2027
+
 /** 住房公积金常见的可选比例档位（%） */
 export const HOUSING_FUND_RATE_OPTIONS = [5, 6, 7, 8, 10, 12]
 

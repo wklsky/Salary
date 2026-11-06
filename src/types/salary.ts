@@ -5,7 +5,7 @@
  */
 import type { DeductionStateMap } from './deduction'
 import type { IncomeItem } from './income'
-import type { InsuranceConfig, InsuranceType } from './insurance'
+import type { CityPolicy, InsuranceConfig, InsuranceType } from './insurance'
 import type { StageRange } from './stage'
 import type { AnnualSummary, InsuranceMonthDetail, MonthlyResult } from './tax'
 
@@ -19,6 +19,13 @@ export type BonusMode = 'separate' | 'merged' | 'auto'
 
 /** 纳税人身份：居民个人按年累计预扣，非居民个人按月单独计税 */
 export type TaxpayerType = 'resident' | 'nonResident'
+
+/**
+ * 工资发放时间：
+ * - same：当月工资当月发，发放月即归属月
+ * - next：本月工资下月发，发放月 m 对应归属月 m-1（1 月按 1 月归属数据估算）
+ */
+export type PayTiming = 'same' | 'next'
 
 /**
  * 单月数据覆盖
@@ -78,6 +85,8 @@ export interface SalaryInput {
   insurance: InsuranceConfig
   deductions: DeductionStateMap
   bonusMode: BonusMode
+  /** 工资发放时间：当月发放或次月发放（次月发放时按实际发放月计税） */
+  payTiming?: PayTiming
   /** 当年雇佣阶段划分，决定各月工资发放口径与是否缴纳社保 */
   stages: StageRange[]
   /** 居民个人走累计预扣，非居民个人按月单独计税且不享受专项附加扣除 */
@@ -90,6 +99,8 @@ export interface SalaryInput {
   customColumns?: CustomColumnItem[]
   /** 税后扣款项目，只减少实发工资，不影响计税与缴费基数 */
   postTaxDeductions?: PostTaxDeductionItem[]
+  /** 用户自定义城市政策，优先于内置城市；用于政策更新前先行自测 */
+  customCities?: CityPolicy[]
 }
 
 /** 年终奖两种口径的税负对比 */
@@ -128,4 +139,6 @@ export interface SalaryResult {
   bonusComparison?: BonusComparison
   /** 当前实际采用的计税方式；split 表示部分奖金单独计税、其余并入综合所得 */
   appliedBonusMode: Exclude<BonusMode, 'auto'> | 'split'
+  /** 年终奖单独计税政策在该年度是否仍有效；过期后已自动降级为并入 */
+  bonusPolicyActive: boolean
 }

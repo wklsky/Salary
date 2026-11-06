@@ -4,8 +4,8 @@
  * @Description: 侧边栏目录与页面分区的导航类型
  */
 
-/** 应用的两个主视图 */
-export type AppView = 'setup' | 'table'
+/** 应用的三个主视图 */
+export type AppView = 'setup' | 'table' | 'compare'
 
 /** 录入设置视图的分区标识，顺序即录入顺序 */
 export type SetupSectionKey =
@@ -18,7 +18,7 @@ export type SetupSectionKey =
   | 'advanced'
 
 /** 月度明细视图的分区标识 */
-export type TableSectionKey = 'overview' | 'bonus' | 'monthly' | 'annual'
+export type TableSectionKey = 'overview' | 'monthly' | 'annual'
 
 /** 侧边栏目录项，index 用于展示分区序号，meta 展示该分区的实时状态 */
 export interface NavItem {

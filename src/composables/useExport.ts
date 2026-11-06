@@ -73,11 +73,66 @@ export function useExport() {
     }
   }
 
+  /**
+   * 导出年度汇总为 CSV
+   * 传入已排好序的「指标 - 金额」行，导出结果与年度页看到的数字一致
+   */
+  function exportAnnualCsv(params: {
+    rows: Array<{ label: string; value: string }>
+    filename: string
+  }) {
+    const header = '指标,金额'
+    const body = params.rows.map(
+      (row) => `${escapeCsv(row.label)},${escapeCsv(row.value)}`,
+    )
+    download(`﻿${[header, ...body].join('\n')}`, params.filename, 'text/csv;charset=utf-8')
+    ElMessage.success('年度汇总已导出为 CSV')
+  }
+
+  /**
+   * 导出方案对比为 CSV：行是指标，列是方案
+   * 首列指标名，其余列为各方案名称，便于直接粘进表格里横向比较
+   */
+  function exportCompareCsv(params: {
+    columns: Array<{ name: string }>
+    rows: Array<{ label: string; values: string[] }>
+    filename: string
+  }) {
+    const header = ['指标', ...params.columns.map((column) => escapeCsv(column.name))].join(',')
+    const body = params.rows.map((row) =>
+      [escapeCsv(row.label), ...row.values.map(escapeCsv)].join(','),
+    )
+    download(`﻿${[header, ...body].join('\n')}`, params.filename, 'text/csv;charset=utf-8')
+    ElMessage.success('方案对比已导出为 CSV')
+  }
+
+  /**
+   * 通用矩阵导出：表头 + 行数据，供工资单等自定义列序的表格使用
+   */
+  function exportMatrixCsv(params: {
+    header: string[]
+    rows: string[][]
+    filename: string
+    successText?: string
+  }) {
+    const header = params.header.map(escapeCsv).join(',')
+    const body = params.rows.map((row) => row.map(escapeCsv).join(','))
+    download(`﻿${[header, ...body].join('\n')}`, params.filename, 'text/csv;charset=utf-8')
+    ElMessage.success(params.successText ?? '已导出为 CSV')
+  }
+
   /** 读取本地 JSON 文件，失败时抛出便于调用方提示 */
   async function readJsonFile<T>(file: File): Promise<T> {
     const text = await file.text()
     return JSON.parse(text) as T
   }
 
-  return { exportMonthlyCsv, exportJson, readJsonFile }
+  return {
+    exportMonthlyCsv,
+    exportAnnualCsv,
+    exportCompareCsv,
+    exportMatrixCsv,
+    exportJson,
+    readJsonFile,
+  }
 }

@@ -24,6 +24,11 @@ export function round0(value: Decimal.Value | null | undefined): number {
   return dec(value).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber()
 }
 
+/** 四舍五入到 0.01 个百分点（4 位小数）；费率按百分比存储时避免 7.5% 被截成 8% */
+export function round4(value: Decimal.Value | null | undefined): number {
+  return dec(value).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+}
+
 /** 逐项累加后再统一取整，避免多笔金额各自取整带来的累计偏差 */
 export function sumMoney(values: Array<number | null | undefined>): number {
   return round2(values.reduce<Decimal>((acc, cur) => acc.plus(dec(cur)), new Decimal(0)))

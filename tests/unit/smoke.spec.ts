@@ -8,7 +8,6 @@ import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia } from 'pinia'
 import AnnualTable from '@/components/result/AnnualTable.vue'
-import BonusAdvice from '@/components/result/BonusAdvice.vue'
 import DeductionEditor from '@/components/deduction/DeductionEditor.vue'
 import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEditor.vue'
 import IncomeEditor from '@/components/income/IncomeEditor.vue'
@@ -39,10 +38,6 @@ describe('组件挂载冒烟', () => {
     expect(text).toContain('年度税后扣款')
     expect(text).toContain('水电费')
     expect(text).toContain('管理费')
-  })
-
-  it('BonusAdvice 可挂载', () => {
-    expect(mountWith(BonusAdvice).text()).toContain('年终奖')
   })
 
   it('AnnualTable 可挂载', () => {

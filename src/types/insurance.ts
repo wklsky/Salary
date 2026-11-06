@@ -4,10 +4,11 @@
  * @Description: 五险一金险种、城市政策与缴费口径的类型定义
  */
 
-/** 险种：养老 / 医疗 / 失业 / 工伤 / 生育 / 住房公积金 */
+/** 险种：养老 / 医疗 / 大额医疗 / 失业 / 工伤 / 生育 / 住房公积金 */
 export type InsuranceType =
   | 'pension'
   | 'medical'
+  | 'largeMedical'
   | 'unemployment'
   | 'injury'
   | 'maternity'
@@ -16,6 +17,7 @@ export type InsuranceType =
 export const INSURANCE_TYPES: InsuranceType[] = [
   'pension',
   'medical',
+  'largeMedical',
   'unemployment',
   'injury',
   'maternity',

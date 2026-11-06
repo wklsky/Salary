@@ -10,6 +10,7 @@ import { STAGE_LABELS } from '@/config/stages'
 import { amountOfMonth, round2, stageTypeOfMonth } from '@/core'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useTableSchemaStore } from '@/stores/useTableSchemaStore'
 import MoneyInput from '@/components/common/MoneyInput.vue'
 import { formatMoney } from '@/utils/format'
@@ -35,6 +36,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useSalaryStore()
+const settingsStore = useSettingsStore()
 const schemaStore = useTableSchemaStore()
 const { result } = useSalaryCalculator()
 
@@ -44,11 +46,14 @@ const visible = computed({
 })
 
 const month = computed(() => props.month)
-const stage = computed(() => stageTypeOfMonth(store.stages, month.value))
+/** 明细按工资所属月展示：本月工资与五险一金同属本月 */
+const incomeMonth = computed(() => month.value)
+const stage = computed(() => stageTypeOfMonth(store.stages, incomeMonth.value))
 const override = computed(() => store.monthOverrides[month.value])
+const insuranceOverride = computed(() => store.monthOverrides[incomeMonth.value])
 const monthResult = computed(() => result.value.monthly[month.value - 1])
 const insurance = computed(() =>
-  result.value.insuranceMonthly.find((item) => item.month === month.value),
+  result.value.insuranceMonthly.find((item) => item.month === incomeMonth.value),
 )
 
 /**
@@ -57,13 +62,14 @@ const insurance = computed(() =>
  */
 const editableIncomes = computed(() =>
   store.incomes.filter(
-    (item) => item.enabled && (item.cycle === 'monthly' || item.month === month.value),
+    (item) =>
+      item.enabled && (item.cycle === 'monthly' || item.month === incomeMonth.value),
   ),
 )
 
 /** 未覆盖时按收入项自身口径（阶段/逐月）自动算出的金额 */
 function autoAmountOf(item: IncomeItem): number {
-  return amountOfMonth(item, month.value, stage.value)
+  return amountOfMonth(item, incomeMonth.value, stage.value)
 }
 
 function amountOf(item: IncomeItem): number {
@@ -88,42 +94,42 @@ function onRestore(item: IncomeItem) {
   store.setMonthAmount(month.value, item.id, undefined)
 }
 
-/** 计分制收入项的本月分数与折算金额 */
+/** 计分制收入项的本月分数与折算金额（按归属月） */
 function scoreOf(item: IncomeItem): number {
-  return item.monthlyScores?.[month.value - 1] ?? 0
+  return item.monthlyScores?.[incomeMonth.value - 1] ?? 0
 }
 
 function scoreAmountOf(item: IncomeItem): number {
   return round2(scoreOf(item) * (item.perPointAmount ?? 0))
 }
 
-/** 自定义列的本月值直接写在列定义上，与收入项的覆盖机制区分 */
+/** 自定义列的本月值直接写在列定义上，与收入项的覆盖机制区分（按归属月） */
 function customValueOf(key: string): number {
   const column = schemaStore.customColumns.find((item) => item.key === key)
-  return column?.custom?.values[month.value - 1] ?? 0
+  return column?.custom?.values[incomeMonth.value - 1] ?? 0
 }
 
 function onCustomValueChange(key: string, value: number) {
-  schemaStore.setCustomValue(key, month.value, value)
+  schemaStore.setCustomValue(key, incomeMonth.value, value)
 }
 
 const insuranceBase = computed(() => ({
   // autoBase 是未应用单月核定值时的规则基数，避免覆盖后「自动」显示成覆盖值
   auto: insurance.value?.autoBase ?? insurance.value?.base ?? 0,
-  value: override.value?.insuranceBase,
+  value: insuranceOverride.value?.insuranceBase,
 }))
 
 function onBaseChange(value: number | undefined) {
-  store.setMonthInsuranceBase(month.value, value)
+  store.setMonthInsuranceBase(incomeMonth.value, value)
 }
 
 const housingFundBase = computed(() => ({
   auto: insurance.value?.housingFundBase ?? 0,
-  value: override.value?.housingFundBase,
+  value: insuranceOverride.value?.housingFundBase,
 }))
 
 function onHousingFundBaseChange(value: number | undefined) {
-  store.setMonthHousingFundBase(month.value, value)
+  store.setMonthHousingFundBase(incomeMonth.value, value)
 }
 
 const summary = computed(() => {
@@ -142,11 +148,11 @@ const summary = computed(() => {
 /** 本月被单独改写的项数，帮助用户快速判断是否还有需要还原的调整 */
 const adjustmentCount = computed(() => {
   const current = override.value
-  if (!current) return 0
+  const bases = insuranceOverride.value
   return (
-    Object.keys(current.amounts ?? {}).length +
-    (typeof current.insuranceBase === 'number' ? 1 : 0) +
-    (typeof current.housingFundBase === 'number' ? 1 : 0)
+    Object.keys(current?.amounts ?? {}).length +
+    (typeof bases?.insuranceBase === 'number' ? 1 : 0) +
+    (typeof bases?.housingFundBase === 'number' ? 1 : 0)
   )
 })
 
@@ -164,6 +170,9 @@ function onResetMonth() {
           {{ adjustmentCount }} 项已单独调整
         </el-tag>
         <span class="month-editor__hint">
+          <template v-if="settingsStore.payTiming === 'next'">
+            明细按工资所属月展示，本月工资于次月到账；
+          </template>
           修改后自动重算该月工资，未修改的项按收入项自身的阶段/逐月口径取值
         </span>
       </header>
@@ -403,12 +412,12 @@ function onResetMonth() {
   padding: 10px 12px;
   border: 1px solid var(--app-line);
   border-radius: 10px;
-  background: #f7f9fc;
+  background: var(--app-sunken);
 }
 
 .summary-cell--accent {
   border-color: var(--app-jade-100);
-  background: linear-gradient(160deg, var(--app-jade-100), #fff);
+  background: linear-gradient(160deg, var(--app-jade-100), var(--app-surface));
 }
 
 .summary-cell__label {
