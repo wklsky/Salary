@@ -13,7 +13,7 @@ import PostTaxDeductionEditor from '@/components/deduction/PostTaxDeductionEdito
 import IncomeEditor from '@/components/income/IncomeEditor.vue'
 import InsuranceEditor from '@/components/insurance/InsuranceEditor.vue'
 import MonthEditorDrawer from '@/components/month/MonthEditorDrawer.vue'
-import SetupView from '@/components/layout/SetupView.vue'
+import SetupView from '@/views/SetupView.vue'
 import StageEditor from '@/components/stage/StageEditor.vue'
 
 function mountWith(comp: unknown) {

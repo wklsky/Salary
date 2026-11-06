@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @Author: wj
- * @FilePath: src/components/layout/CompareView.vue
+ * @FilePath: src/views/CompareView.vue
  * @Description: 方案对比视图：把已保存方案与当前录入并排比较关键指标
  */
 import { computed } from 'vue'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @Author: wj
- * @FilePath: src/components/layout/SetupView.vue
+ * @FilePath: src/views/SetupView.vue
  * @Description: 录入设置视图：按分页组合章节面板与实时工资条
  */
 import { computed, watch } from 'vue'

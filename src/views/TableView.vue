@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @Author: wj
- * @FilePath: src/components/layout/TableView.vue
+ * @FilePath: src/views/TableView.vue
  * @Description: 月度明细视图：结果概览、可自定义表头的明细表与单月数据编辑
  */
 import { computed, defineAsyncComponent, ref, watch } from 'vue'

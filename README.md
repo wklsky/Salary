@@ -226,10 +226,14 @@ src/
 │   ├── columns.ts           # 表格列 schema
 │   └── presets.ts           # 收入项与列预设
 ├── stores/          # Pinia：录入数据、设置、列配置
-├── components/
+├── views/           # 页面层：视图组装与页面级交互
+│   ├── SetupView.vue    # 录入设置（分区目录 + 章节面板 + 工资条）
+│   ├── TableView.vue    # 月度明细（概览 + 明细表 + 年度汇总）
+│   └── CompareView.vue  # 方案对比（当前录入 vs 已保存方案）
+├── components/      # 组件层：可复用 UI 组件，不持有页面编排逻辑
 │   ├── common/      # SectionPanel / PagePager / MoneyInput 等通用组件
-│   ├── setup/       # PeriodForm / AdvancedForm / PayslipCard
-│   ├── layout/      # App 外壳、AdminSidebar、两个视图
+│   ├── setup/       # PeriodForm / AdvancedForm / PayslipCard / TargetReverseCard
+│   ├── layout/      # App 外壳组件 AdminSidebar
 │   ├── month/       # 单月数据编辑抽屉
 │   ├── income/ insurance/ deduction/ stage/  # 各类录入面板
 │   └── result/ table-config/ chart/          # 结果表、列配置、图表
@@ -240,7 +244,7 @@ tests/unit/          # 内核单测、列取值、组件挂载、应用冒烟
 docs/                # 开发计划书
 ```
 
-计算逻辑集中在 `core/`，不依赖任何 UI 代码，可单独测试或移植。
+分层约定：`views/` 只做页面组装与页面级交互；`components/` 是复用组件、不持有页面编排；`core/` + `config/` 是纯计算与政策数据，不依赖任何 UI 代码，可单独测试或移植；`stores/` 负责状态与持久化；页面通过 `composables/` 与 store 拿数据，不直接触碰计算内核。
 
 ## 测试
 
