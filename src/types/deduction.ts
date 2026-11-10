@@ -73,6 +73,13 @@ export interface DeductionState {
   month: number
   /** 是否由本人全额扣除；赡养老人区分独生子女（3000）与非独生子女分摊（≤1500） */
   soleProvider?: boolean
+  /**
+   * period 为 monthly 时的生效起始月（1-12），缺省视为 1 月
+   * 用于表达「9 月入学」「3 月起租房」这类中途开始享受的扣除
+   */
+  startMonth?: number
+  /** period 为 monthly 时的生效结束月（1-12），缺省视为 12 月 */
+  endMonth?: number
 }
 
 export type DeductionStateMap = Record<DeductionKey, DeductionState>

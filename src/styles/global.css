@@ -1,43 +1,50 @@
 /**
  * @Author: wj
  * @FilePath: src/styles/global.css
- * @Description: 全局基础样式、设计变量与 Element Plus 主题覆写
+ * @Description: 全局基础样式、设计变量与 Element Plus 主题覆写（未来科技风：深空青蓝 + 玻璃面板 + HUD 边框）
  */
 :root {
   color-scheme: light;
 
-  /* 应用色板：深墨蓝用于文字与结果主卡，玉石绿用于强调，琥珀色用于税费提示 */
-  --app-ink-900: #16233a;
-  --app-ink-700: #3a4a61;
-  --app-ink-500: #64748b;
-  --app-ink-300: #94a3b8;
-  --app-paper: #edf1f5;
+  /* 应用色板：冷调深蓝文字，青蓝科技色作主强调（浅色为「冷白实验室」） */
+  --app-ink-900: #07121f;
+  --app-ink-700: #30465c;
+  --app-ink-500: #61788f;
+  --app-ink-300: #93a7ba;
+  --app-paper: #eef4fa;
   --app-surface: #ffffff;
-  --app-line: #dfe6ee;
-  --app-line-strong: #c9d4e0;
-  --app-jade-700: #0b5e57;
-  --app-jade-600: #0f766e;
-  --app-jade-100: #e7f2f0;
-  --app-amber-700: #9a4f0b;
-  --app-amber-600: #b45309;
+  --app-line: #d8e6f2;
+  --app-line-strong: #b6cde2;
+  --app-jade-700: #0e7490;
+  --app-jade-600: #0891b2;
+  --app-jade-100: #e0f6fc;
+  --app-amber-700: #b45309;
+  --app-amber-600: #d97706;
   --app-amber-100: #fdf3e3;
-  --app-rose-600: #b42318;
-  --app-rose-100: #fdecea;
+  --app-rose-600: #be123c;
+  --app-rose-100: #fde7ec;
 
-  /* 次级底色：浅色下几乎看不出的冷灰面板，深色下单独指定 */
-  --app-sunken: #f7f9fc;
-  --app-sunken-2: #f5f8fb;
-  --app-warn-bg: #fffaf2;
-  --app-warn-border: #f3e2c8;
-  --app-table-head: #fbfcfe;
-  --app-scrollbar: #c3cfdd;
-  --app-focus-ring: rgb(15 118 110 / 13%);
+  /* 次级底色：冷灰面板与输入底色 */
+  --app-sunken: #f3f8fd;
+  --app-sunken-2: #eff6fc;
+  --app-warn-bg: #fff9ee;
+  --app-warn-border: #f0dcc2;
+  --app-table-head: #f2f8fd;
+  --app-scrollbar: #b6cde2;
+  --app-focus-ring: rgb(8 145 178 / 16%);
+  /* 面板内的极淡网格线，替代此前的账本纸纹 */
+  --app-paper-line: rgb(8 145 178 / 5%);
+  --app-grid: rgb(8 145 178 / 6%);
+  --app-input-bg: #ffffff;
+  --app-bracket: rgb(8 145 178 / 42%);
+  --app-glow: rgb(8 145 178 / 24%);
+  --app-panel-shine: rgb(8 145 178 / 8%);
 
   --app-radius-sm: 6px;
   --app-radius-md: 10px;
-  --app-radius-lg: 14px;
+  --app-radius-lg: 12px;
 
-  /* 排版阶梯：正文 14，说明 13/12，页眉标题 16，账本序号 28 */
+  /* 排版阶梯：正文 14，说明 13/12，页眉标题 16，HUD 序号 28 */
   --app-text-xs: 11px;
   --app-text-sm: 12px;
   --app-text-base: 13px;
@@ -45,8 +52,8 @@
   --app-text-lg: 16px;
   --app-text-xl: 20px;
   --app-display: 28px;
-  --app-shadow-sm: 0 1px 2px rgb(22 35 58 / 5%);
-  --app-shadow-md: 0 14px 40px -24px rgb(22 35 58 / 35%);
+  --app-shadow-sm: 0 1px 2px rgb(7 18 31 / 6%);
+  --app-shadow-md: 0 20px 50px -30px rgb(8 145 178 / 30%);
 
   /* 数字使用等宽/工程字体，金额列不会因字宽跳动 */
   --app-font-sans:
@@ -54,20 +61,20 @@
     sans-serif;
   --app-font-num:
     'Bahnschrift', 'DIN Alternate', 'SF Mono', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  /* 账本式章节序号：用宋体/衬线体做少量点缀，正文仍保持无衬线 */
+  /* HUD 式章节序号：等宽工程字体 + 宽字距，替代此前的衬线账本序号 */
   --app-font-ledger:
-    'Songti SC', 'STSong', 'SimSun', Georgia, 'Times New Roman', serif;
+    'Bahnschrift', 'DIN Alternate', 'SF Mono', 'Roboto Mono', Consolas, monospace;
 
-  /* Element Plus 主色改用玉石绿，和默认蓝色区分开 */
-  --el-color-primary: #0f766e;
-  --el-color-primary-light-3: #4f9a93;
-  --el-color-primary-light-5: #87bcb6;
-  --el-color-primary-light-7: #b9d8d4;
-  --el-color-primary-light-8: #d0e5e2;
-  --el-color-primary-light-9: #e7f2f0;
-  --el-color-primary-dark-2: #0b5e57;
+  /* Element Plus 主色改用科技青蓝 */
+  --el-color-primary: #0891b2;
+  --el-color-primary-light-3: #3fb4d1;
+  --el-color-primary-light-5: #7ccde0;
+  --el-color-primary-light-7: #b2e2ee;
+  --el-color-primary-light-8: #ccecf5;
+  --el-color-primary-light-9: #e6f7fb;
+  --el-color-primary-dark-2: #0e7490;
 
-  /* 成功色与主色同族：玉石绿就是本应用的"好"色 */
+  /* 成功色与主色同族：科技青即本应用的「好」色 */
   --el-color-success: var(--el-color-primary);
   --el-color-success-light-3: var(--el-color-primary-light-3);
   --el-color-success-light-5: var(--el-color-primary-light-5);
@@ -76,7 +83,7 @@
   --el-color-success-light-9: var(--el-color-primary-light-9);
   --el-color-success-dark-2: var(--el-color-primary-dark-2);
 
-  /* 警告色用应用琥珀，与税费提示条一致 */
+  /* 警告色用琥珀，与税费提示条一致 */
   --el-color-warning: #b45309;
   --el-color-warning-light-3: #cb8753;
   --el-color-warning-light-5: #daa984;
@@ -85,14 +92,14 @@
   --el-color-warning-light-9: #f8eee6;
   --el-color-warning-dark-2: #904207;
 
-  /* 危险/错误色用应用玫瑰红 */
-  --el-color-danger: #b42318;
-  --el-color-danger-light-3: #cb655d;
-  --el-color-danger-light-5: #da918c;
-  --el-color-danger-light-7: #e9bdba;
-  --el-color-danger-light-8: #f0d3d1;
-  --el-color-danger-light-9: #f8e9e8;
-  --el-color-danger-dark-2: #901c13;
+  /* 危险/错误色用冷调玫红 */
+  --el-color-danger: #be123c;
+  --el-color-danger-light-3: #d15873;
+  --el-color-danger-light-5: #e08ba0;
+  --el-color-danger-light-7: #efbac5;
+  --el-color-danger-light-8: #f4d1d9;
+  --el-color-danger-light-9: #fbe8ec;
+  --el-color-danger-dark-2: #9f1239;
   --el-color-error: var(--el-color-danger);
   --el-color-error-light-3: var(--el-color-danger-light-3);
   --el-color-error-light-5: var(--el-color-danger-light-5);
@@ -101,53 +108,53 @@
   --el-color-error-light-9: var(--el-color-danger-light-9);
   --el-color-error-dark-2: var(--el-color-danger-dark-2);
 
-  /* 信息色用墨蓝灰 */
-  --el-color-info: #64748b;
-  --el-color-info-light-3: #939eae;
-  --el-color-info-light-5: #b2bac5;
-  --el-color-info-light-7: #d0d6df;
-  --el-color-info-light-8: #e0e3e8;
-  --el-color-info-light-9: #f0f1f1;
-  --el-color-info-dark-2: #505d6f;
+  /* 信息色用冷灰蓝 */
+  --el-color-info: #61788f;
+  --el-color-info-light-3: #92a3b5;
+  --el-color-info-light-5: #b0bdcb;
+  --el-color-info-light-7: #cfd8e2;
+  --el-color-info-light-8: #dfe5eb;
+  --el-color-info-light-9: #f0f3f6;
+  --el-color-info-dark-2: #4c5f73;
 
-  /* 文本色接入墨蓝色阶 */
+  /* 文本色接入冷蓝色阶 */
   --el-text-color-primary: var(--app-ink-900);
   --el-text-color-regular: var(--app-ink-700);
   --el-text-color-secondary: var(--app-ink-500);
   --el-text-color-placeholder: var(--app-ink-300);
-  --el-text-color-disabled: #cad1dc;
+  --el-text-color-disabled: #a5b6c7;
 
-  /* 边框与填充统一到应用中性色 */
+  /* 边框与填充统一到应用冷色中性 */
   --el-border-color: var(--app-line);
-  --el-border-color-light: #e8edf3;
-  --el-border-color-lighter: #eef2f7;
-  --el-border-color-extra-light: #f4f7fa;
+  --el-border-color-light: #e2ecf6;
+  --el-border-color-lighter: #eaf2f9;
+  --el-border-color-extra-light: #f2f8fd;
   --el-border-color-dark: var(--app-line-strong);
-  --el-border-color-darker: #b6c4d4;
+  --el-border-color-darker: #98b5cf;
   --el-border-color-hover: var(--app-jade-600);
-  --el-fill-color: #f2f5f9;
-  --el-fill-color-light: #f7f9fc;
-  --el-fill-color-lighter: #fafbfd;
-  --el-fill-color-extra-light: #fcfdfe;
-  --el-fill-color-dark: #e9eef4;
-  --el-fill-color-darker: #e2e8f0;
+  --el-fill-color: #eff5fb;
+  --el-fill-color-light: #f4f9fd;
+  --el-fill-color-lighter: #f8fbfe;
+  --el-fill-color-extra-light: #fbfdfe;
+  --el-fill-color-dark: #e8f1f9;
+  --el-fill-color-darker: #e0ebf5;
   --el-fill-color-blank: #ffffff;
   --el-bg-color: #ffffff;
   --el-bg-color-page: var(--app-paper);
   --el-bg-color-overlay: #ffffff;
 
   /* 禁用态 */
-  --el-disabled-bg-color: #f2f5f9;
-  --el-disabled-text-color: #a9b6c6;
-  --el-disabled-border-color: #dde4ec;
+  --el-disabled-bg-color: #f2f7fb;
+  --el-disabled-text-color: #a5b6c7;
+  --el-disabled-border-color: #dbe6f0;
 
-  /* 遮罩与阴影带上墨蓝色调 */
-  --el-mask-color: rgb(22 35 58 / 45%);
-  --el-mask-color-extra-light: rgb(22 35 58 / 20%);
-  --el-box-shadow: 0 12px 32px -12px rgb(22 35 58 / 18%);
-  --el-box-shadow-light: 0 6px 20px -8px rgb(22 35 58 / 12%);
-  --el-box-shadow-lighter: 0 4px 14px -8px rgb(22 35 58 / 10%);
-  --el-box-shadow-dark: 0 18px 48px -20px rgb(22 35 58 / 30%);
+  /* 遮罩与阴影带冷蓝色调 */
+  --el-mask-color: rgb(7 18 31 / 45%);
+  --el-mask-color-extra-light: rgb(7 18 31 / 20%);
+  --el-box-shadow: 0 12px 32px -12px rgb(7 18 31 / 18%);
+  --el-box-shadow-light: 0 6px 20px -8px rgb(7 18 31 / 12%);
+  --el-box-shadow-lighter: 0 4px 14px -8px rgb(7 18 31 / 10%);
+  --el-box-shadow-dark: 0 18px 48px -20px rgb(7 18 31 / 30%);
 
   /* 弹层圆角与主题半径对齐 */
   --el-dialog-border-radius: 12px;
@@ -160,127 +167,133 @@
   --el-font-family: var(--app-font-sans);
 }
 
-/* 深色主题：由 useTheme 写在 <html data-theme="dark"> 上，所有组件只读语义变量 */
+/* 深色主题：深空黑蓝底 + 青蓝霓虹，是本次科技风的主视觉 */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --app-ink-900: #e6eef8;
-  --app-ink-700: #c3cfdd;
-  --app-ink-500: #93a3b5;
-  --app-ink-300: #6b7c90;
-  --app-paper: #0e1623;
-  --app-surface: #172131;
-  --app-line: #273449;
-  --app-line-strong: #35455e;
-  --app-jade-700: #7dd3c7;
-  --app-jade-600: #16998f;
-  --app-jade-100: #14312f;
-  --app-amber-700: #e9a23b;
-  --app-amber-600: #d99022;
-  --app-amber-100: #33260f;
-  --app-rose-600: #e07a72;
-  --app-rose-100: #3a1f1e;
+  --app-ink-900: #e7f4ff;
+  --app-ink-700: #b3c9e2;
+  --app-ink-500: #7e95b2;
+  --app-ink-300: #5b7492;
+  --app-paper: #04070d;
+  --app-surface: #0a1220;
+  --app-line: rgb(56 189 248 / 13%);
+  --app-line-strong: rgb(56 189 248 / 30%);
+  --app-jade-700: #7dd3fc;
+  --app-jade-600: #22d3ee;
+  --app-jade-100: #072a38;
+  --app-amber-700: #fcd34d;
+  --app-amber-600: #fbbf24;
+  --app-amber-100: #2a2113;
+  --app-rose-600: #fb7185;
+  --app-rose-100: #3a1620;
 
-  --app-sunken: #1b2637;
-  --app-sunken-2: #1f2b3d;
-  --app-warn-bg: #2a2113;
+  --app-sunken: #08111d;
+  --app-sunken-2: #0b1828;
+  --app-warn-bg: #191306;
   --app-warn-border: #4a3a1c;
-  --app-table-head: #1b2637;
-  --app-scrollbar: #35455e;
-  --app-focus-ring: rgb(125 211 199 / 18%);
+  --app-table-head: #081424;
+  --app-scrollbar: #1d3a54;
+  --app-focus-ring: rgb(34 211 238 / 22%);
+  --app-paper-line: rgb(56 189 248 / 6%);
+  --app-grid: rgb(56 189 248 / 5%);
+  --app-input-bg: #071019;
+  --app-bracket: rgb(34 211 238 / 55%);
+  --app-glow: rgb(34 211 238 / 32%);
+  --app-panel-shine: rgb(34 211 238 / 7%);
 
-  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
-  --app-shadow-md: 0 14px 40px -24px rgb(0 0 0 / 70%);
+  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 70%);
+  --app-shadow-md: 0 26px 60px -34px rgb(0 0 0 / 95%), 0 0 48px -30px rgb(34 211 238 / 45%);
 
-  --el-color-primary: #16998f;
-  --el-color-primary-light-3: #3fb0a5;
-  --el-color-primary-light-5: #69c2b8;
-  --el-color-primary-light-7: #9bd6cf;
-  --el-color-primary-light-8: #b6e2dd;
-  --el-color-primary-light-9: #12312e;
-  --el-color-primary-dark-2: #0f766e;
+  --el-color-primary: #22d3ee;
+  --el-color-primary-light-3: #67e8f9;
+  --el-color-primary-light-5: #a5f3fc;
+  --el-color-primary-light-7: #12556b;
+  --el-color-primary-light-8: #0d3b4c;
+  --el-color-primary-light-9: #0a2a38;
+  --el-color-primary-dark-2: #0891b2;
 
-  --el-color-warning: #d99022;
-  --el-color-warning-light-3: #b47a24;
-  --el-color-warning-light-5: #8f6221;
-  --el-color-warning-light-7: #4a3a1c;
-  --el-color-warning-light-8: #3a2d16;
-  --el-color-warning-light-9: #2a2113;
-  --el-color-warning-dark-2: #e9a23b;
+  --el-color-warning: #fbbf24;
+  --el-color-warning-light-3: #b48a1c;
+  --el-color-warning-light-5: #7d6014;
+  --el-color-warning-light-7: #4d3c10;
+  --el-color-warning-light-8: #3a2d0c;
+  --el-color-warning-light-9: #2a2108;
+  --el-color-warning-dark-2: #fcd34d;
 
-  --el-color-danger: #e07a72;
-  --el-color-danger-light-3: #b5635d;
-  --el-color-danger-light-5: #8a4d49;
-  --el-color-danger-light-7: #5a3230;
-  --el-color-danger-light-8: #462726;
-  --el-color-danger-light-9: #3a1f1e;
-  --el-color-danger-dark-2: #f09a92;
+  --el-color-danger: #fb7185;
+  --el-color-danger-light-3: #c45a6c;
+  --el-color-danger-light-5: #934754;
+  --el-color-danger-light-7: #5c323c;
+  --el-color-danger-light-8: #482830;
+  --el-color-danger-light-9: #351d24;
+  --el-color-danger-dark-2: #fda4af;
 
-  --el-color-info: #93a3b5;
-  --el-color-info-light-3: #7b8b9d;
-  --el-color-info-light-5: #637485;
-  --el-color-info-light-7: #3c4b5e;
-  --el-color-info-light-8: #31405a;
-  --el-color-info-light-9: #263346;
-  --el-color-info-dark-2: #b3c0cf;
+  --el-color-info: #7e95b2;
+  --el-color-info-light-3: #6a7f99;
+  --el-color-info-light-5: #566b85;
+  --el-color-info-light-7: #38495e;
+  --el-color-info-light-8: #2c3b4d;
+  --el-color-info-light-9: #22303f;
+  --el-color-info-dark-2: #a9bdd6;
 
   --el-text-color-primary: var(--app-ink-900);
   --el-text-color-regular: var(--app-ink-700);
   --el-text-color-secondary: var(--app-ink-500);
-  --el-text-color-placeholder: #5f7085;
-  --el-text-color-disabled: #4a5a6d;
+  --el-text-color-placeholder: #526d87;
+  --el-text-color-disabled: #3d556d;
 
   --el-border-color: var(--app-line);
-  --el-border-color-light: #2c3a52;
-  --el-border-color-lighter: #31405a;
-  --el-border-color-extra-light: #364459;
-  --el-border-color-dark: var(--app-line-strong);
-  --el-border-color-darker: #45566f;
-  --el-border-color-hover: #2bb3a5;
+  --el-border-color-light: #14304a;
+  --el-border-color-lighter: #173a56;
+  --el-border-color-extra-light: #1b425e;
+  --el-border-color-dark: rgb(34 211 238 / 34%);
+  --el-border-color-darker: rgb(34 211 238 / 46%);
+  --el-border-color-hover: #67e8f9;
 
-  --el-fill-color: #1b2637;
-  --el-fill-color-light: #1f2b3d;
-  --el-fill-color-lighter: #232f42;
-  --el-fill-color-extra-light: #263346;
-  --el-fill-color-dark: #16202f;
-  --el-fill-color-darker: #121b28;
+  --el-fill-color: #0a1524;
+  --el-fill-color-light: #0d1b2c;
+  --el-fill-color-lighter: #102336;
+  --el-fill-color-extra-light: #132840;
+  --el-fill-color-dark: #081220;
+  --el-fill-color-darker: #060f19;
   --el-fill-color-blank: var(--app-surface);
   --el-bg-color: var(--app-surface);
   --el-bg-color-page: var(--app-paper);
-  --el-bg-color-overlay: #1a2435;
+  --el-bg-color-overlay: #071019;
 
-  --el-disabled-bg-color: #1b2637;
-  --el-disabled-text-color: #5f7085;
-  --el-disabled-border-color: #2c3a52;
+  --el-disabled-bg-color: #08111d;
+  --el-disabled-text-color: #4a6480;
+  --el-disabled-border-color: #14304a;
 
-  --el-mask-color: rgb(0 0 0 / 60%);
-  --el-mask-color-extra-light: rgb(0 0 0 / 30%);
-  --el-box-shadow: 0 12px 32px -12px rgb(0 0 0 / 60%);
-  --el-box-shadow-light: 0 6px 20px -8px rgb(0 0 0 / 45%);
-  --el-box-shadow-lighter: 0 4px 14px -8px rgb(0 0 0 / 40%);
-  --el-box-shadow-dark: 0 18px 48px -20px rgb(0 0 0 / 70%);
+  --el-mask-color: rgb(0 0 0 / 70%);
+  --el-mask-color-extra-light: rgb(0 0 0 / 38%);
+  --el-box-shadow: 0 16px 40px -16px rgb(0 0 0 / 80%);
+  --el-box-shadow-light: 0 8px 24px -10px rgb(0 0 0 / 60%);
+  --el-box-shadow-lighter: 0 4px 14px -8px rgb(0 0 0 / 50%);
+  --el-box-shadow-dark: 0 18px 48px -20px rgb(0 0 0 / 90%);
 
   --el-card-bg-color: var(--app-surface);
-  --el-input-bg-color: var(--app-surface);
+  --el-input-bg-color: var(--app-input-bg);
   --el-table-bg-color: var(--app-surface);
   --el-table-tr-bg-color: var(--app-surface);
   --el-table-header-bg-color: var(--app-table-head);
   --el-table-header-text-color: var(--app-ink-700);
-  --el-table-row-hover-bg-color: var(--app-jade-100);
+  --el-table-row-hover-bg-color: #0c2a38;
   --el-table-border-color: var(--app-line);
 }
 
 :root[data-theme='dark'] ::selection {
-  color: #0e1623;
-  background: #7dd3c7;
+  color: #04070d;
+  background: #22d3ee;
 }
 
 :root[data-theme='dark'] ::-webkit-scrollbar-thumb {
-  background: #35455e;
+  background: #1d3a54;
 }
 
 :root[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
-  background-color: #2bb3a5;
+  background-color: #22d3ee;
 }
 
 * {
@@ -295,7 +308,7 @@ body,
   height: 100%;
 }
 
-/* 应用外壳固定为一屏高，滚动交给 .app__body，避免整页滚动导致顶栏与结果卡离开视野 */
+/* 深空底：青蓝与紫的光晕 + 细网格，构成 HUD 背景 */
 body {
   overflow: hidden;
   font-family: var(--app-font-sans);
@@ -303,13 +316,33 @@ body {
   line-height: 1.55;
   color: var(--app-ink-900);
   background:
-    radial-gradient(circle at 12% -10%, rgb(15 118 110 / 8%), transparent 32%),
+    radial-gradient(circle at 12% -10%, var(--app-glow), transparent 34%),
+    radial-gradient(circle at 88% 108%, rgb(124 92 246 / 10%), transparent 42%),
     var(--app-paper);
   -webkit-font-smoothing: antialiased;
 }
 
+/* 固定网格层：让整个界面像一块悬浮的操作面板 */
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background-image:
+    linear-gradient(var(--app-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 78%);
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+}
+
 ::selection {
-  color: #fff;
+  color: #04070d;
   background: var(--app-jade-600);
 }
 
@@ -342,7 +375,68 @@ strong,
 
 .el-card {
   border-color: var(--app-line);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-sm);
+}
+
+/* HUD 玻璃面板：浅色下是冷白玻璃，深色下是深空玻璃。
+   细网格纹 + 左上/右下青蓝角标，替代此前的纸纹与玉色压角。 */
+.ledger-card {
+  position: relative;
+  background-color: var(--app-surface);
+  background-image:
+    linear-gradient(160deg, var(--app-panel-shine), transparent 42%),
+    repeating-linear-gradient(0deg, transparent 0 27px, var(--app-paper-line) 27px 28px),
+    repeating-linear-gradient(90deg, transparent 0 27px, var(--app-paper-line) 27px 28px);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-sm);
+  backdrop-filter: blur(12px);
+}
+
+.ledger-card::before,
+.ledger-card::after {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  content: '';
+  opacity: 0.75;
+}
+
+/* 角标收在卡片内侧，避免被 el-card 的 overflow: hidden 裁掉 */
+.ledger-card::before {
+  top: 4px;
+  left: 4px;
+  border-top: 1.5px solid var(--app-bracket);
+  border-left: 1.5px solid var(--app-bracket);
+  border-top-left-radius: 4px;
+}
+
+.ledger-card::after {
+  right: 4px;
+  bottom: 4px;
+  border-right: 1.5px solid var(--app-bracket);
+  border-bottom: 1.5px solid var(--app-bracket);
+  border-bottom-right-radius: 4px;
+}
+
+/* 挂到 el-card 上时压过组件自身的底色/描边，保证玻璃感一致 */
+.el-card.ledger-card {
+  background-color: var(--app-surface);
+  border-color: var(--app-line);
+}
+
+/* 组件内同名样式可能晚于全局加载，双重类名保证面板质感不被覆盖；
+   各组件自己的 padding 与 hover 反馈仍生效 */
+.ledger-card.ledger-card {
+  background-color: var(--app-surface);
+  background-image:
+    linear-gradient(160deg, var(--app-panel-shine), transparent 42%),
+    repeating-linear-gradient(0deg, transparent 0 27px, var(--app-paper-line) 27px 28px),
+    repeating-linear-gradient(90deg, transparent 0 27px, var(--app-paper-line) 27px 28px);
+  border-color: var(--app-line);
+  border-radius: var(--app-radius-lg);
   box-shadow: var(--app-shadow-sm);
 }
 
@@ -359,11 +453,37 @@ strong,
 }
 
 .el-tag {
-  border-radius: 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
 }
 
 .el-button {
   font-weight: 500;
+  letter-spacing: 0.02em;
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.el-button--primary:not(.is-text):not(.is-link) {
+  background-image: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-dark-2));
+  border-color: transparent;
+}
+
+.el-button--primary:not(.is-text):not(.is-link):hover,
+.el-button--primary:not(.is-text):not(.is-link):focus-visible {
+  box-shadow: 0 0 0 1px var(--app-bracket), 0 8px 24px -10px var(--app-glow);
+}
+
+/* 文字按钮保持透明底 + 主色字，避免主题渐变底色盖住文字 */
+.el-button.is-text.el-button--primary {
+  background-image: none;
+  color: var(--el-color-primary);
+}
+
+.el-button.is-text.el-button--primary:hover {
+  background-color: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
 }
 
 .el-input-number .el-input__wrapper,
@@ -371,7 +491,7 @@ strong,
   box-shadow: 0 0 0 1px var(--app-line-strong) inset;
 }
 
-/* 悬停与聚焦时用玉色描边 + 柔和光环，强化可输入区域的辨识度 */
+/* 悬停与聚焦时用青色描边 + 柔和光环，强化可输入区域的辨识度 */
 .el-input__wrapper:hover,
 .el-select .el-select__wrapper:hover {
   box-shadow: 0 0 0 1px var(--app-jade-600) inset;
@@ -396,7 +516,48 @@ strong,
   --el-table-row-hover-bg-color: var(--app-jade-100);
 }
 
-/* 统一细滚动条：轨道透明，悬停时滑块变玉色 */
+/* 表头做成 HUD 标签：小号宽字距、分隔线更淡 */
+.el-table th.el-table__cell {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* 斑马纹用次级冷色，合计行用青蓝浅底压轴 */
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: var(--app-sunken-2);
+}
+
+/* 抽屉头部统一 HUD 式：标题 16px、下边框分隔、左侧青色光条 */
+.el-drawer__header {
+  position: relative;
+  margin-bottom: 0;
+  padding: 14px 18px 14px 22px;
+  border-bottom: 1px solid var(--app-line);
+  color: var(--app-ink-900);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.el-drawer__header::before {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 12px;
+  width: 3px;
+  border-radius: 2px;
+  content: '';
+  background: linear-gradient(180deg, var(--app-jade-600), transparent);
+  box-shadow: 0 0 10px var(--app-glow);
+}
+
+/* 空态文案统一为次级冷灰蓝 */
+.el-empty__description p {
+  color: var(--app-ink-500);
+}
+
+/* 统一细滚动条：轨道透明，悬停时滑块变青色 */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -426,13 +587,76 @@ strong,
   html {
     scroll-behavior: smooth;
   }
+
+  /* 切换视图时轻微上浮淡入，避免整页硬切 */
+  .app__body > section {
+    animation: app-view-in 0.26s ease-out both;
+  }
+
+  /* 卡片悬停只抬 1px，保持账本面板的克制感 */
+  .ledger-card {
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      transform 0.18s ease;
+  }
+
+  .ledger-card:hover {
+    transform: translateY(-1px);
+  }
 }
 
-/* 打印：只留正文账本，导航、分页与图表全部隐藏，卡片尽量不跨页截断 */
+@keyframes app-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 表格精修：表头吸顶、行悬停走低饱和青，去掉默认灰边 */
+.el-table {
+  --el-table-border-color: var(--app-line);
+  --el-table-header-bg-color: var(--app-table-head);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--app-jade-600) 8%, transparent);
+  --el-table-current-row-bg-color: color-mix(in srgb, var(--app-jade-600) 12%, transparent);
+  background: transparent;
+}
+
+.el-table th.el-table__cell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--app-table-head);
+}
+
+.el-table td.el-table__cell,
+.el-table th.el-table__cell.is-leaf {
+  border-bottom-color: var(--app-line);
+}
+
+/* 空态：插画收小一点，文案与按钮靠得更紧，避免面板里出现大片空白 */
+.el-empty {
+  padding: 32px 0;
+}
+
+.el-empty__image {
+  width: 120px;
+}
+
+/* 打印：只留正文面板，导航、分页与图表全部隐藏，卡片尽量不跨页截断 */
 @media print {
   body {
     overflow: visible;
     background: #fff;
+  }
+
+  body::before {
+    display: none;
   }
 
   .app,
@@ -456,9 +680,33 @@ strong,
     padding: 0;
   }
 
-  .el-card,
-  .table-view__insights {
+  .el-card {
     box-shadow: none;
     break-inside: avoid;
+  }
+
+  .ledger-card {
+    background-image: none;
+    border-color: #ddd;
+    backdrop-filter: none;
+  }
+
+  .ledger-card::before,
+  .ledger-card::after {
+    display: none;
+  }
+
+  /* 「打印工资条」：只输出专用版式，页面其它部分不进纸面 */
+  body.print-payslip .app {
+    display: none !important;
+  }
+
+  body.print-payslip .payslip-print {
+    display: block !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm;
   }
 }

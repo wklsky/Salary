@@ -58,8 +58,8 @@ describe('组件挂载冒烟', () => {
     })
     const text = wrapper.text()
     expect(text).toContain('计算周期')
-    expect(text).toContain('计算月数')
-    expect(text).toContain('个月，最长 12 个月')
+    expect(text).toContain('终止月份')
+    expect(text).toContain('按起止月份自动计算')
   })
 
   it('MonthEditorDrawer 可挂载并渲染月份标题', () => {

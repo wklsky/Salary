@@ -4,7 +4,7 @@
  * @FilePath: src/views/CompareView.vue
  * @Description: 方案对比视图：把已保存方案与当前录入并排比较关键指标
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Plus } from '@element-plus/icons-vue'
 import { calculateSalary } from '@/core'
@@ -58,6 +58,9 @@ interface CompareColumn {
   result: ReturnType<typeof calculateSalary>
 }
 
+/** 被临时隐藏的方案；方案较多时可只保留关心的几套同表对比 */
+const hiddenIds = ref<string[]>([])
+
 /** 第一列永远是当前录入，便于把存档方案和正在编辑的这套对照 */
 const columns = computed<CompareColumn[]>(() => {
   const list: CompareColumn[] = [
@@ -71,6 +74,7 @@ const columns = computed<CompareColumn[]>(() => {
     },
   ]
   for (const scheme of salaryStore.schemes) {
+    if (hiddenIds.value.includes(scheme.id)) continue
     const input = schemeInput(scheme)
     list.push({
       id: scheme.id,
@@ -83,6 +87,26 @@ const columns = computed<CompareColumn[]>(() => {
   }
   return list
 })
+
+/** 顶栏计数：当前录入不算「方案」，避免未存方案时显示 1 套 */
+const visibleSchemeCount = computed(() => columns.value.length - 1)
+const metaText = computed(() =>
+  salaryStore.schemes.length ? `当前录入 + ${visibleSchemeCount.value} 套存档` : '仅当前录入',
+)
+
+const emptyText = computed(() =>
+  salaryStore.schemes.length
+    ? '所有存档方案都已隐藏，勾选上方方案即可加入对比'
+    : '还没有保存任何方案，先保存当前录入，再添加另一套对照',
+)
+
+function toggleScheme(id: string) {
+  if (hiddenIds.value.includes(id)) {
+    hiddenIds.value = hiddenIds.value.filter((item) => item !== id)
+  } else {
+    hiddenIds.value = [...hiddenIds.value, id]
+  }
+}
 
 const currentColumn = computed(() => columns.value[0])
 
@@ -222,7 +246,7 @@ function onExportCompare() {
       <div class="compare-view__titles">
         <div class="compare-view__title-row">
           <h2 class="compare-view__title">方案对比</h2>
-          <span class="compare-view__meta">{{ columns.length }} 套方案</span>
+          <span class="compare-view__meta">{{ metaText }}</span>
         </div>
         <p class="compare-view__desc">把已保存方案与当前录入并排比较，看哪一套到手更多</p>
       </div>
@@ -241,8 +265,21 @@ function onExportCompare() {
       </div>
     </header>
 
+    <div v-if="salaryStore.schemes.length" class="compare-view__picks">
+      <span class="compare-view__picks-label">参与对比</span>
+      <el-check-tag
+        v-for="scheme in salaryStore.schemes"
+        :key="scheme.id"
+        :checked="!hiddenIds.includes(scheme.id)"
+        @change="toggleScheme(scheme.id)"
+      >
+        {{ scheme.name }}
+      </el-check-tag>
+      <span class="compare-view__picks-hint">未勾选的方案不参与并排计算与导出</span>
+    </div>
+
     <div v-if="columns.length <= 1" class="compare-view__empty">
-      <el-empty description="还没有保存任何方案，先保存当前录入，再添加另一套对照">
+      <el-empty :description="emptyText">
         <el-button type="primary" plain :icon="Plus" @click="saveCurrent">保存当前方案</el-button>
       </el-empty>
     </div>
@@ -272,7 +309,7 @@ function onExportCompare() {
         </article>
       </div>
 
-      <el-card shadow="never" class="compare-view__panel">
+      <el-card shadow="never" class="compare-view__panel ledger-card">
         <template #header>
           <div class="compare-view__panel-head">
             <span class="compare-view__panel-title">指标对照</span>
@@ -458,6 +495,41 @@ function onExportCompare() {
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-md);
   box-shadow: var(--app-shadow-sm);
+}
+
+.compare-view__picks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 10px 14px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-md);
+}
+
+.compare-view__picks-label {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-ink-500);
+}
+
+.compare-view__picks-hint {
+  margin-left: auto;
+  font-size: var(--app-text-sm);
+  color: var(--app-ink-300);
+}
+
+.compare-view__picks :deep(.el-check-tag) {
+  border: 1px solid var(--app-line);
+  background: var(--app-sunken-2);
+  color: var(--app-ink-700);
+}
+
+.compare-view__picks :deep(.el-check-tag.is-checked) {
+  border-color: var(--app-jade-600);
+  background: var(--app-jade-100);
+  color: var(--app-jade-700);
 }
 
 .compare-cards {

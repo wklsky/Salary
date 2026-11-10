@@ -148,11 +148,18 @@ const annualTotal = computed(() => result.value.annual.gross)
             <span class="income-item__unit">元/分</span>
           </template>
           <MoneyInput
-            v-else
+            v-else-if="!item.staged"
             :model-value="item.amount"
             class="income-item__amount"
             @update:model-value="(value) => store.updateIncome(item.id, { amount: value })"
           />
+          <span
+            v-else
+            class="income-item__amount income-item__amount--staged"
+            title="已按阶段区分发放，实际发放额以各阶段金额为准"
+          >
+            按阶段金额
+          </span>
           <el-select
             v-if="!item.scoreBased"
             v-model="item.cycle"
@@ -201,6 +208,10 @@ const annualTotal = computed(() => result.value.annual.gross)
             />
           </div>
         </div>
+
+        <p v-if="item.staged && !item.scoreBased" class="income-item__tip">
+          已按阶段区分发放：通用金额输入框由下方各阶段金额替代，改动阶段金额立即生效
+        </p>
 
         <div class="income-item__foot">
           <el-select v-model="item.kind" class="income-item__kind">
@@ -440,6 +451,21 @@ const annualTotal = computed(() => result.value.annual.gross)
 /* 金额/周期固定宽度，窄屏时靠 flex-wrap 换行而不是被压扁 */
 .income-item__amount {
   width: 160px;
+}
+
+/* 阶段差异化时不再显示通用金额输入，改用以占位提示，避免出现「改了不生效」的幽灵输入框 */
+.income-item__amount--staged {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  cursor: help;
 }
 
 .income-item__cycle {

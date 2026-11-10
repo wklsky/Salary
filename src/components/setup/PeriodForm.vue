@@ -2,7 +2,7 @@
 /**
  * @Author: wj
  * @FilePath: src/components/setup/PeriodForm.vue
- * @Description: 计算周期表单：年度、起始月份与计算月数
+ * @Description: 计算周期表单：年度、起始月份与终止月份，总月数自动计算
  */
 import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -14,11 +14,13 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => ({
   label: `${index + 1} 月`,
 }))
 
-/** 起始月变化后月数可能超出年末，取两者较小值保证不跨年 */
-const monthCount = computed({
-  get: () => Math.min(settingsStore.monthCount, settingsStore.maxMonthCount),
-  set: (value: number) => settingsStore.updateSettings({ monthCount: value }),
-})
+/** 终止月份不得早于起始月份，因此只列出起始月之后的月份 */
+const endMonthOptions = computed(() =>
+  MONTH_OPTIONS.filter((option) => option.value >= settingsStore.startMonth),
+)
+
+/** 总月数由起始月与终止月自动推导，仅用于展示 */
+const monthCount = computed(() => settingsStore.monthCount)
 </script>
 
 <template>
@@ -43,21 +45,25 @@ const monthCount = computed({
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="计算月数">
-        <el-input-number
-          v-model="monthCount"
-          :min="1"
-          :max="settingsStore.maxMonthCount"
-          controls-position="right"
-          class="period-form__field"
-        />
-        <span class="period-form__unit">个月，最长 12 个月</span>
+      <el-form-item label="终止月份">
+        <el-select v-model="settingsStore.endMonth" class="period-form__field">
+          <el-option
+            v-for="option in endMonthOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="总月数">
+        <span class="period-form__total num">{{ monthCount }} 个月</span>
+        <span class="period-form__auto">按起止月份自动计算</span>
       </el-form-item>
     </el-form>
     <el-alert
       :closable="false"
       type="info"
-      title="按自然年计算，起始月 + 计算月数不得跨年。跨年周期（如 2025 年 7 月至 2026 年 6 月）请分两段录入后自行合计。"
+      title="按自然年计算，起始月到终止月不得跨年。跨年周期（如 2025 年 7 月至 2026 年 6 月）请分两段录入后自行合计。"
     />
   </div>
 </template>
@@ -79,7 +85,13 @@ const monthCount = computed({
   width: 160px;
 }
 
-.period-form__unit {
+.period-form__total {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--app-jade-700);
+}
+
+.period-form__auto {
   margin-left: 8px;
   font-size: 12px;
   color: var(--app-ink-500);

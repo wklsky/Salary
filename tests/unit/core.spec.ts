@@ -1311,6 +1311,41 @@ describe('计税口径修正', () => {
     expect(result.monthly[11]?.net).toBe(5970)
   })
 
+  it('按月扣除支持生效区间，只计区间内月份', () => {
+    const deductions = makeDeductions()
+    // 子女教育 9 月入学：9-12 月每月 2000，1-8 月不扣
+    deductions.childrenEducation = {
+      enabled: true,
+      amount: 2000,
+      share: 1,
+      month: 12,
+      startMonth: 9,
+      endMonth: 12,
+    }
+    const result = calculateSalary(
+      makeInput({ incomes: [makeIncome({ amount: 20000 })], deductions }),
+    )
+    expect(result.monthly[0]?.deductionTotal).toBe(0)
+    expect(result.monthly[8]?.deductionTotal).toBe(2000)
+    expect(result.monthly[11]?.deductionTotal).toBe(2000)
+    // 全年累计只按 4 个月计
+    const annualDeduction = result.monthly.reduce((acc, month) => acc + month.deductionTotal, 0)
+    expect(annualDeduction).toBe(8000)
+  })
+
+  it('生效区间与在职区间取交集，不会多算离职后的月份', () => {
+    const deductions = makeDeductions()
+    // 房租全年有效，但 6 月离职，只能扣 3-6 月
+    deductions.housingRent = { enabled: true, amount: 1500, share: 1, month: 12 }
+    const result = calculateSalary(
+      makeInput({ startMonth: 3, endMonth: 6, deductions, incomes: [makeIncome({ amount: 20000 })] }),
+    )
+    const annualDeduction = result.monthly.reduce((acc, month) => acc + month.deductionTotal, 0)
+    expect(annualDeduction).toBe(6000)
+    expect(result.monthly[1]?.deductionTotal).toBe(0)
+    expect(result.monthly[2]?.deductionTotal).toBe(1500)
+  })
+
   it('年度扣除落在离职月之后时提前到在职区间内', () => {
     const deductions = makeDeductions()
     deductions.personalPension = { enabled: true, amount: 12000, share: 1, month: 12 }

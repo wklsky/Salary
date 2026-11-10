@@ -5,15 +5,17 @@
  * @Description: 月度明细视图：结果概览、可自定义表头的明细表与单月数据编辑
  */
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
-import { ArrowLeft, Download, Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, Download, Printer, Setting } from '@element-plus/icons-vue'
 import PagePager from '@/components/common/PagePager.vue'
 import AnnualTable from '@/components/result/AnnualTable.vue'
 import MonthlyTable from '@/components/result/MonthlyTable.vue'
+import PayslipPrint from '@/components/result/PayslipPrint.vue'
 import ResultCards from '@/components/result/ResultCards.vue'
 import MonthEditorDrawer from '@/components/month/MonthEditorDrawer.vue'
 import ExplainDrawer from '@/components/result/ExplainDrawer.vue'
 import PayrollCheckDrawer from '@/components/result/PayrollCheckDrawer.vue'
 import { INSURANCE_LABELS } from '@/config/columns'
+import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import { useExport } from '@/composables/useExport'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
@@ -68,6 +70,24 @@ function onRowClick(row: MonthlyResult) {
   if (!isWithinRange.value(row.month)) return
   editingMonth.value = row.month
   editorVisible.value = true
+}
+
+/** 打印工资条用的月份集合，与「导出工资单」保持同一区间口径 */
+const printRows = computed(() =>
+  result.value.monthly.filter((item) => isWithinRange.value(item.month)),
+)
+
+/** 打印时给 body 加标记，只输出工资条专用版式，页面其它部分不进纸面 */
+function onPrintPayslip() {
+  document.body.classList.add('print-payslip')
+  const cleanup = () => {
+    document.body.classList.remove('print-payslip')
+    window.removeEventListener('afterprint', cleanup)
+  }
+  window.addEventListener('afterprint', cleanup)
+  window.print()
+  // 个别浏览器不触发 afterprint，兜底清理，避免影响之后的普通打印
+  window.setTimeout(cleanup, 1500)
 }
 
 function onExportCsv() {
@@ -170,57 +190,8 @@ function onExportPayroll() {
   })
 }
 
-/** 概览页结论带：把全年结果先摊成三句话，用户不用自己算 */
+/** 概览页结论带已并入结果主卡（ResultCards），这里只保留导出用的月数口径 */
 const monthsWorked = computed(() => settingsStore.endMonth - settingsStore.startMonth + 1)
-
-interface Insight {
-  label: string
-  value: string
-  hint: string
-}
-
-const insights = computed<Insight[]>(() => {
-  const annual = result.value.annual
-  const months = Math.max(1, monthsWorked.value)
-  return [
-    {
-      label: '月均到手',
-      value: `¥${(annual.net / months).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`,
-      hint: `按 ${months} 个月计`,
-    },
-    {
-      label: '到手率',
-      value: `${(annual.netRate * 100).toFixed(1)}%`,
-      hint: '年度到手 / 年度应发',
-    },
-    {
-      label: '实际税负率',
-      value: `${(annual.taxRate * 100).toFixed(1)}%`,
-      hint: '年度个税 / 年度应发',
-    },
-  ]
-})
-
-const insightNote = computed(() => {
-  const comparison = result.value.bonusComparison
-  if (comparison) {
-    const label =
-      comparison.better === 'separate'
-        ? '单独计税'
-        : comparison.better === 'merged'
-          ? '并入综合所得'
-          : '拆分计税'
-    const split =
-      comparison.better === 'split' && comparison.splitAmount
-        ? `（单独计税部分 ¥${comparison.splitAmount.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}）`
-        : ''
-    return `年终奖建议${label}${split}`
-  }
-  const nonCash = result.value.annual.nonCashIncome
-  return nonCash > 0
-    ? `非现金福利 ¥${nonCash.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 计入应发，但不计入到手`
-    : '以上口径按当前录入数据实时计算'
-})
 
 /** 月度明细分区目录，编号与元信息随列配置和奖金项实时变化 */
 const sections = computed<NavItem[]>(() => {
@@ -282,6 +253,12 @@ function goToSection(item: NavItem | undefined) {
           <span v-if="currentSection?.meta" class="table-view__meta">
             {{ currentSection.meta }}
           </span>
+          <el-tooltip
+            :content="`年终奖单独计税有效期至 ${BONUS_SEPARATE_VALID_UNTIL}`"
+            placement="bottom"
+          >
+            <span class="table-view__policy">政策 {{ POLICY_VERSION }}</span>
+          </el-tooltip>
         </div>
         <p class="table-view__desc">{{ currentSectionDesc }}</p>
         <p class="table-view__range">
@@ -299,6 +276,7 @@ function goToSection(item: NavItem | undefined) {
           <el-button size="small" type="primary" plain :icon="Download" @click="onExportPayroll">
             导出工资单
           </el-button>
+          <el-button size="small" :icon="Printer" @click="onPrintPayslip">打印工资条</el-button>
         </template>
         <el-button
           v-if="section === 'annual'"
@@ -315,15 +293,6 @@ function goToSection(item: NavItem | undefined) {
 
     <section v-if="section === 'overview'" class="table-view__section">
       <div class="table-view__overview">
-        <!-- 先给结论，再看细项：月均到手 / 到手率 / 税负率 / 年终奖建议 -->
-        <div class="table-view__insights">
-          <div v-for="item in insights" :key="item.label" class="insight">
-            <span class="insight__label">{{ item.label }}</span>
-            <strong class="insight__value num">{{ item.value }}</strong>
-            <span class="insight__hint">{{ item.hint }}</span>
-          </div>
-          <p class="insight__note">{{ insightNote }}</p>
-        </div>
         <ResultCards />
         <!-- 概览页直接挂趋势图，不必再切到年度页签 -->
         <Suspense>
@@ -336,7 +305,7 @@ function goToSection(item: NavItem | undefined) {
     </section>
 
     <section v-if="section === 'monthly'" class="table-view__section">
-      <el-card shadow="never" class="table-view__card">
+      <el-card shadow="never" class="table-view__card ledger-card">
         <template #header>
           <div class="table-view__card-head">
             <span class="table-view__card-title">逐月发放与扣缴</span>
@@ -356,7 +325,7 @@ function goToSection(item: NavItem | undefined) {
     <section v-if="section === 'annual'" class="table-view__section">
       <!-- 宽屏并排：左边汇总表，右边图表；窄屏自动堆叠 -->
       <div class="table-view__annual">
-        <el-card shadow="never" class="table-view__card">
+        <el-card shadow="never" class="table-view__card ledger-card">
           <template #header>
             <div class="table-view__card-head">
               <span class="table-view__card-title">年度汇总</span>
@@ -389,6 +358,16 @@ function goToSection(item: NavItem | undefined) {
     <MonthEditorDrawer v-model="editorVisible" :month="editingMonth" />
     <ExplainDrawer v-model="explainVisible" />
     <PayrollCheckDrawer v-model="payrollVisible" />
+
+    <Teleport to="body">
+      <PayslipPrint
+        :year="settingsStore.year"
+        :start-month="settingsStore.startMonth"
+        :end-month="settingsStore.endMonth"
+        :rows="printRows"
+        :annual="result.annual"
+      />
+    </Teleport>
   </section>
 </template>
 
@@ -410,53 +389,6 @@ function goToSection(item: NavItem | undefined) {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-/* 结论带：三个数字 + 一句提示，先看结论再看细项 */
-.table-view__insights {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 6px 18px;
-  padding: 12px 16px 10px;
-  background: var(--app-surface);
-  border: 1px solid var(--app-line);
-  border-left: 3px solid var(--app-jade-600);
-  border-radius: var(--app-radius-md);
-  box-shadow: var(--app-shadow-sm);
-}
-
-.insight {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.insight__label {
-  font-size: var(--app-text-sm);
-  color: var(--app-ink-500);
-}
-
-.insight__value {
-  font-family: var(--app-font-num);
-  font-size: var(--app-text-xl);
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--app-jade-700);
-}
-
-.insight__hint {
-  font-size: var(--app-text-xs);
-  color: var(--app-ink-300);
-}
-
-.insight__note {
-  grid-column: 1 / -1;
-  margin: 2px 0 0;
-  padding-top: 6px;
-  border-top: 1px dashed var(--app-line);
-  font-size: var(--app-text-sm);
-  color: var(--app-ink-500);
 }
 
 /* 年度页：汇总表与图表并排，窄屏堆叠 */
@@ -553,6 +485,17 @@ function goToSection(item: NavItem | undefined) {
   background: var(--app-sunken-2);
   font-size: var(--app-text-sm);
   white-space: nowrap;
+}
+
+.table-view__policy {
+  padding: 2px 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-sunken-2);
+  color: var(--app-ink-500);
+  font-size: var(--app-text-xs);
+  white-space: nowrap;
+  cursor: default;
 }
 
 .table-view__desc {

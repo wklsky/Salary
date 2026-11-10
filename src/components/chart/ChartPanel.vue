@@ -38,31 +38,31 @@ const isDark = computed(() => settingsStore.theme === 'dark')
 
 const months = computed(() => result.value.monthly.map((item) => `${item.month} 月`))
 
-/* 图表配色：与全局「墨蓝 + 玉石绿 + 琥珀」一致，不再用 Element 默认蓝红 */
+/* 图表配色：冷调深蓝底 + 青色霓虹 + 琥珀，与科技视觉一致，不再用 Element 默认蓝红 */
 const PALETTE_LIGHT = {
-  ink: '#16233a',
-  jade: '#0f766e',
-  slate: '#8fa3ba',
-  slateDark: '#4b5b72',
-  amber: '#e9a23b',
-  text: '#64748b',
-  line: '#dfe6ee',
-  lineStrong: '#c9d4e0',
+  ink: '#07121f',
+  jade: '#0891b2',
+  slate: '#5b7fa6',
+  slateDark: '#33465c',
+  amber: '#d97706',
+  text: '#61788f',
+  line: '#d8e6f2',
+  lineStrong: '#b6cde2',
   tooltipBg: '#ffffff',
-  tooltipShadow: '0 12px 32px -12px rgb(22 35 58 / 18%)',
+  tooltipShadow: '0 12px 32px -12px rgb(7 18 31 / 18%)',
 } as const
 
 const PALETTE_DARK = {
-  ink: '#e6eef8',
-  jade: '#2bb3a5',
-  slate: '#8fa3ba',
-  slateDark: '#5b6d86',
-  amber: '#e9a23b',
-  text: '#93a3b5',
-  line: '#273449',
-  lineStrong: '#35455e',
-  tooltipBg: '#1a2435',
-  tooltipShadow: '0 12px 32px -12px rgb(0 0 0 / 55%)',
+  ink: '#e7f4ff',
+  jade: '#22d3ee',
+  slate: '#5b7fa6',
+  slateDark: '#33465c',
+  amber: '#fbbf24',
+  text: '#7e95b2',
+  line: '#102c44',
+  lineStrong: '#1d3a54',
+  tooltipBg: '#071019',
+  tooltipShadow: '0 12px 32px -12px rgb(0 0 0 / 65%), 0 0 24px -12px rgb(34 211 238 / 40%)',
 } as const
 
 const chart = computed(() => (isDark.value ? PALETTE_DARK : PALETTE_LIGHT))
@@ -167,8 +167,8 @@ const structureOption = computed(() => {
   }
 })
 
-/* 五险一金用玉绿阶梯 + 琥珀公积金，与主色一致 */
-const INSURANCE_COLORS = ['#0f766e', '#4f9a93', '#87bcb6', '#b9d8d4', '#8fa3ba', '#e9a23b']
+/* 五险一金用青蓝阶梯 + 琥珀公积金，与霓虹主色一致 */
+const INSURANCE_COLORS = ['#22d3ee', '#38a9c9', '#5b8fb3', '#7a83b8', '#a78bfa', '#fbbf24']
 
 const insuranceOption = computed(() => {
   const c = chart.value
@@ -196,7 +196,7 @@ const insuranceOption = computed(() => {
     <el-card
       v-if="props.mode === 'all' || props.mode === 'trend'"
       shadow="never"
-      class="chart-card"
+      class="chart-card ledger-card"
     >
       <template #header>月度应发 / 到手 / 个税趋势</template>
       <v-chart class="chart" :option="trendOption" autoresize />
@@ -204,7 +204,7 @@ const insuranceOption = computed(() => {
     <el-card
       v-if="props.mode === 'all' || props.mode === 'structure'"
       shadow="never"
-      class="chart-card"
+      class="chart-card ledger-card"
     >
       <template #header>年度收入去向</template>
       <v-chart class="chart" :option="structureOption" autoresize />
@@ -212,7 +212,7 @@ const insuranceOption = computed(() => {
     <el-card
       v-if="props.mode === 'all' || props.mode === 'insurance'"
       shadow="never"
-      class="chart-card"
+      class="chart-card ledger-card"
     >
       <template #header>五险一金个人缴纳占比</template>
       <v-chart class="chart" :option="insuranceOption" autoresize />

@@ -9,6 +9,7 @@ import { createDefaultIncomes, createDefaultPostTaxDeductions } from '@/config/p
 import { DEDUCTION_CATALOG, DEDUCTION_LIST } from '@/config/specialDeductions'
 import { createDefaultStages, createStage } from '@/config/stages'
 import { amountOfMonth, OTHER_INCOME_LABELS, paidAmountOfItem, round2, stageTypeOfMonth } from '@/core'
+import { validateSnapshot } from '@/core/persist'
 import { createId } from '@/utils/id'
 import { INSURANCE_TYPES } from '@/types'
 import type {
@@ -282,6 +283,20 @@ export const useSalaryStore = defineStore(
       }))
     }
 
+    /**
+     * 补齐缺失险种
+     * 大额医疗等险种是后加能力，旧存档没有对应 key 时按「未启用」补齐：
+     * 保证升级前后计算结果一致，需要时用户在费率面板里开启即可
+     */
+    function normalizeInsuranceItems(config: InsuranceConfig): InsuranceConfig {
+      const defaults = createDefaultInsurance().items
+      const items = { ...config.items }
+      INSURANCE_TYPES.forEach((type) => {
+        if (!items[type]) items[type] = { ...defaults[type], enabled: false }
+      })
+      return { ...config, items }
+    }
+
     /** 对当前录入数据做一次字段补全，用于兼容旧版本 localStorage 存档 */
     function normalize() {
       incomes.value = normalizeIncomes(incomes.value)
@@ -298,14 +313,32 @@ export const useSalaryStore = defineStore(
         skipInsuranceTypes: stage.skipInsuranceTypes ?? [],
       }))
       // 公积金基数字段为后加能力，旧存档缺失时沿用社保口径，保证行为不变
-      insurance.value = {
+      insurance.value = normalizeInsuranceItems({
         ...insurance.value,
         housingFundBaseMode: insurance.value.housingFundBaseMode ?? 'same',
         housingFundManualBase: insurance.value.housingFundManualBase ?? insurance.value.manualBase,
         housingFundClampEnabled:
           insurance.value.housingFundClampEnabled ?? insurance.value.clampEnabled,
         medicalFixed: insurance.value.medicalFixed ?? 0,
-      }
+      })
+      // 扣除生效区间为后加能力：未填写时内核按全年处理，填写后收敛到 1-12 的合法区间
+      DEDUCTION_LIST.forEach((meta) => {
+        const state = deductions.value[meta.key]
+        if (!state || meta.period !== 'monthly') return
+        if (typeof state.startMonth === 'number') {
+          state.startMonth = Math.min(12, Math.max(1, Math.round(state.startMonth)))
+        }
+        if (typeof state.endMonth === 'number') {
+          state.endMonth = Math.min(12, Math.max(1, Math.round(state.endMonth)))
+        }
+        if (
+          typeof state.startMonth === 'number' &&
+          typeof state.endMonth === 'number' &&
+          state.endMonth < state.startMonth
+        ) {
+          state.endMonth = state.startMonth
+        }
+      })
     }
 
     /** 设置某收入项在特定阶段的发放金额 */
@@ -324,10 +357,18 @@ export const useSalaryStore = defineStore(
       target.stageEnabled = { ...target.stageEnabled, [stage]: enabled }
     }
 
-    /** 切换阶段差异化开关；开启时把当前金额作为各阶段的初始默认值 */
+    /**
+     * 切换阶段差异化开关
+     * 开启时把当前金额作为各阶段的初始默认值；
+     * 关闭时把「转正后」金额回填为通用金额，避免输入框回落到更早的旧数值
+     */
     function toggleStagedIncome(id: string, staged: boolean) {
       const target = incomes.value.find((item) => item.id === id)
       if (!target) return
+      if (!staged) {
+        const regular = target.stageAmounts?.regular
+        if (typeof regular === 'number') target.amount = regular
+      }
       target.staged = staged
       if (staged) ensureStaged(target)
     }
@@ -559,8 +600,17 @@ export const useSalaryStore = defineStore(
       postTaxDeductions?: PostTaxDeductionItem[]
       schemes?: SalaryScheme[]
     }) {
+      // 导入前先做结构校验：坏文件只提示、不落库，避免把应用带进异常状态
+      const errors = validateSnapshot(payload)
+      if (errors.length) throw new Error(`导入失败：${errors[0]}`)
+
       if (Array.isArray(payload.incomes)) incomes.value = normalizeIncomes(payload.incomes)
-      if (payload.insurance) insurance.value = { ...createDefaultInsurance(), ...payload.insurance }
+      if (payload.insurance) {
+        insurance.value = normalizeInsuranceItems({
+          ...createDefaultInsurance(),
+          ...payload.insurance,
+        })
+      }
       if (payload.deductions) {
         deductions.value = { ...createDefaultDeductions(), ...payload.deductions }
       }

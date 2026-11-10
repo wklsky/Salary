@@ -2,7 +2,7 @@
 /**
  * @Author: wj
  * @FilePath: src/components/common/PagePager.vue
- * @Description: 通用分页页脚：账本式页码 + 上一页/下一页
+ * @Description: 通用分页页脚：HUD 式页码 + 上一页/下一页
  */
 interface Props {
   /** 页码，如 01 / 07 */
@@ -50,14 +50,14 @@ const emit = defineEmits<{
   align-items: center;
   gap: 12px;
   padding: 10px 2px 6px;
-  border-top: 1px dashed var(--app-line-strong);
+  border-top: 1px solid var(--app-line);
 }
 
 .page-pager__progress {
-  color: var(--app-ink-500);
+  color: var(--app-jade-600);
   font-family: var(--app-font-ledger);
   font-size: 11.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.18em;
 }
 
 .page-pager__spacer {

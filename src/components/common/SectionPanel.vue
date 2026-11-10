@@ -1,8 +1,8 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 /**
  * @Author: wj
  * @FilePath: src/components/common/SectionPanel.vue
- * @Description: 通用分页面板，统一账本式章节页眉与卡片容器
+ * @Description: 通用分页面板，统一 HUD 式章节页眉与玻璃面板容器
  */
 interface Props {
   /** 章节序号，如 01 */
@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-  <el-card shadow="never" class="section-panel">
+  <el-card shadow="never" class="section-panel ledger-card">
     <template #header>
       <div class="section-panel__head">
         <span class="section-panel__index">{{ props.index }}</span>
@@ -46,7 +46,7 @@ const props = withDefaults(defineProps<Props>(), {
   padding: 0;
 }
 
-/* 账本式页眉：大号衬线章节号 + 竖分隔线 + 标题说明 */
+/* HUD 式页眉：方括号章节号 + 竖分隔线 + 标题说明 */
 .section-panel__head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -59,12 +59,26 @@ const props = withDefaults(defineProps<Props>(), {
   min-width: 36px;
   margin: 0;
   padding: 0 2px 0 0;
-  color: var(--app-ink-900);
+  color: var(--app-jade-600);
   font-family: var(--app-font-ledger);
-  font-size: var(--app-display);
-  font-weight: 400;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+}
+
+.section-panel__index::before {
+  margin-right: 1px;
+  color: var(--app-ink-300);
+  font-size: 15px;
+  content: '[';
+}
+
+.section-panel__index::after {
+  margin-left: 1px;
+  color: var(--app-ink-300);
+  font-size: 15px;
+  content: ']';
 }
 
 .section-panel__titles {
@@ -77,6 +91,7 @@ const props = withDefaults(defineProps<Props>(), {
   margin: 0;
   font-size: var(--app-text-lg);
   font-weight: 700;
+  letter-spacing: 0.05em;
   color: var(--app-ink-900);
 }
 
@@ -92,9 +107,11 @@ const props = withDefaults(defineProps<Props>(), {
   padding: 3px 10px;
   border: 1px solid var(--app-line);
   border-radius: 999px;
-  color: var(--app-ink-700);
-  background: var(--app-sunken-2);
+  color: var(--app-jade-700);
+  background: var(--app-jade-100);
+  font-family: var(--app-font-num);
   font-size: var(--app-text-sm);
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 

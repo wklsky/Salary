@@ -212,7 +212,12 @@ function deductionSum(
       const cap = meta.sharedLimit && state.soleProvider === false ? meta.sharedLimit : meta.limit
       const effective = cap > 0 ? Math.min(afterThreshold, cap) : afterThreshold
 
-      if (meta.period === 'monthly') return effective
+      if (meta.period === 'monthly') {
+        // 生效区间与在职区间取交集：9 月入学的子女教育只计 9-12 月
+        const from = Math.max(state.startMonth ?? 1, startMonth)
+        const to = Math.min(state.endMonth ?? 12, endMonth)
+        return month >= from && month <= to ? effective : 0
+      }
       // 年度一次性扣除落在在职区间之外时收敛到区间内：
       // 早于入职月顺延到入职月，晚于离职月提前到离职月，避免当年扣除被静默吞掉
       const hitMonth = Math.min(Math.max(state.month, startMonth), endMonth)

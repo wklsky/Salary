@@ -20,6 +20,7 @@ import StageEditor from '@/components/stage/StageEditor.vue'
 import { useSalaryStore } from '@/stores/useSalaryStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { resolveCity } from '@/core'
+import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
 import type { NavItem, SetupSectionKey } from '@/types'
 
 interface Props {
@@ -47,11 +48,6 @@ const settingsStore = useSettingsStore()
 /** 窗口较窄（结果卡下移的断点）时，改在目录条下方插一张横向紧凑结果卡 */
 const { width: windowWidth } = useWindowSize()
 const isCompact = computed(() => windowWidth.value <= 1200)
-/**
- * 桌面端侧边栏已提供「本页目录」，页内目录条只在窄屏（侧边栏收进抽屉）时出现，
- * 避免同一份 01–07 目录在两处重复出现
- */
-const showStepper = computed(() => windowWidth.value <= 960)
 
 const cityName = computed(() => resolveCity(salaryStore.insurance.cityCode).name)
 const enabledDeductionCount = computed(
@@ -106,7 +102,7 @@ function goToSection(item: NavItem | undefined) {
   <section class="setup">
     <div class="setup__grid" :class="{ 'setup__grid--single': isCompact }">
       <div class="setup__main">
-        <nav v-if="showStepper" class="setup__stepper" aria-label="录入分区目录">
+        <nav class="setup__stepper" aria-label="录入分区目录">
           <button
             v-for="(item, index) in navItems"
             :key="item.key"
@@ -116,6 +112,7 @@ function goToSection(item: NavItem | undefined) {
               'is-active': item.key === section,
               'is-done': index < currentIndex,
             }"
+            :aria-current="item.key === section ? 'step' : undefined"
             @click="goToSection(item)"
           >
             <span class="stepper-item__state" aria-hidden="true">
@@ -124,6 +121,12 @@ function goToSection(item: NavItem | undefined) {
             </span>
             <span class="stepper-item__label">{{ item.label }}</span>
           </button>
+          <el-tooltip
+            :content="`年终奖单独计税有效期至 ${BONUS_SEPARATE_VALID_UNTIL}`"
+            placement="bottom"
+          >
+            <span class="setup__policy">政策 {{ POLICY_VERSION }}</span>
+          </el-tooltip>
         </nav>
         <!-- 窄屏时结果卡落不进右栏，改在目录条下方放一张横向紧凑版，保证录入时看得到结果 -->
         <PayslipCard v-if="isCompact" compact @next="emit('next')" />
@@ -257,13 +260,31 @@ function goToSection(item: NavItem | undefined) {
   top: 12px;
   z-index: 10;
   display: flex;
+  align-items: center;
   gap: 4px;
   overflow-x: auto;
   padding: 8px;
-  background: var(--app-surface);
+  background: color-mix(in srgb, var(--app-surface) 78%, transparent);
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-md);
-  box-shadow: 0 6px 18px -14px rgb(22 35 58 / 22%);
+  box-shadow: var(--app-shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.setup__policy {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-sunken-2);
+  color: var(--app-ink-500);
+  font-family: var(--app-font-num);
+  font-size: var(--app-text-xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: default;
 }
 
 .stepper-item {
@@ -287,7 +308,7 @@ function goToSection(item: NavItem | undefined) {
 }
 
 .stepper-item:hover {
-  background: var(--app-paper);
+  background: var(--app-sunken-2);
   border-color: var(--app-line-strong);
   color: var(--app-ink-700);
 }
@@ -295,9 +316,9 @@ function goToSection(item: NavItem | undefined) {
 .stepper-item__state {
   min-width: 20px;
   text-align: center;
-  font-family: var(--app-font-ledger), serif;
+  font-family: var(--app-font-ledger);
   font-size: 12px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--app-ink-300);
 }
 
@@ -306,6 +327,9 @@ function goToSection(item: NavItem | undefined) {
   border-color: var(--app-jade-600);
   color: var(--app-jade-700);
   font-weight: 600;
+  box-shadow:
+    inset 0 0 16px -6px var(--app-glow),
+    0 0 18px -8px var(--app-glow);
 }
 
 .stepper-item.is-active .stepper-item__state {
@@ -318,6 +342,15 @@ function goToSection(item: NavItem | undefined) {
 
 .stepper-item.is-done .stepper-item__state {
   color: var(--app-jade-600);
+}
+
+/* 分步表单：短章节也把面板撑满可视区，避免下方留出一大块空白 */
+.setup__main {
+  min-height: calc(100vh - 150px);
+}
+
+.setup__main > .section-panel {
+  flex: 1 0 auto;
 }
 
 /* 分页切换时给内容一个轻微入场，强化「换了一页」的感觉 */

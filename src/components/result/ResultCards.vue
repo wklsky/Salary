@@ -5,6 +5,7 @@
  * @Description: 年度结果概览：到手主卡 + 收入构成条 + 关键指标网格
  */
 import { computed } from 'vue'
+import { OfficeBuilding, Stamp, Tickets, Umbrella, Wallet } from '@element-plus/icons-vue'
 import { useCountUp } from '@/composables/useCountUp'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -61,24 +62,28 @@ const stats = computed(() => {
   return [
     {
       key: 'gross',
+      icon: Wallet,
       label: '年度应发',
       value: annual.value.gross,
       sub: `月均 ¥${formatMoney(round2(annual.value.gross / months))}`,
     },
     {
       key: 'insurance',
+      icon: Umbrella,
       label: '五险一金（个人）',
       value: annual.value.insurancePersonal,
       sub: `占应发 ${formatPercent(annual.value.insurancePersonal / (annual.value.gross || 1))}`,
     },
     {
       key: 'tax',
+      icon: Tickets,
       label: '年度个税',
       value: annual.value.tax,
       sub: `实际税负 ${formatPercent(annual.value.taxRate)}`,
     },
     {
       key: 'company',
+      icon: OfficeBuilding,
       label: '单位用工成本',
       value: annual.value.companyCost,
       sub: `含单位缴纳 ¥${formatMoney(annual.value.insuranceCompany)}`,
@@ -94,6 +99,41 @@ const settlementText = computed(() => {
   return diff < 0
     ? `预计退税 ¥${formatMoney(Math.abs(diff))}`
     : `预计补税 ¥${formatMoney(diff)}`
+})
+
+/** 主卡结论行：月均到手 / 到手率 / 税负率，三格一眼读完 */
+const heroInsights = computed(() => {
+  const months = monthsWorked.value
+  return [
+    {
+      label: '月均到手',
+      value: `¥${(annual.value.net / months).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`,
+    },
+    { label: '到手率', value: `${(annual.value.netRate * 100).toFixed(1)}%` },
+    { label: '税负率', value: `${(annual.value.taxRate * 100).toFixed(1)}%` },
+  ]
+})
+
+/** 主卡脚注：年终奖建议口径 / 非现金提示 */
+const insightNote = computed(() => {
+  const comparison = result.value.bonusComparison
+  if (comparison) {
+    const label =
+      comparison.better === 'separate'
+        ? '单独计税'
+        : comparison.better === 'merged'
+          ? '并入综合所得'
+          : '拆分计税'
+    const split =
+      comparison.better === 'split' && comparison.splitAmount
+        ? `（单独计税部分 ¥${comparison.splitAmount.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}）`
+        : ''
+    return `年终奖建议${label}${split}`
+  }
+  const nonCash = annual.value.nonCashIncome
+  return nonCash > 0
+    ? `非现金福利 ¥${nonCash.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 计入应发，但不计入到手`
+    : '以上口径按当前录入数据实时计算'
 })
 </script>
 
@@ -115,6 +155,14 @@ const settlementText = computed(() => {
         <span aria-hidden="true">·</span>
         应纳税所得额 ¥{{ formatMoney(annual.taxableIncome) }}
       </p>
+
+      <ul class="summary-hero__insights">
+        <li v-for="item in heroInsights" :key="item.label">
+          <span class="summary-hero__insight-label">{{ item.label }}</span>
+          <strong class="summary-hero__insight-value num">{{ item.value }}</strong>
+        </li>
+      </ul>
+      <p class="summary-hero__note">{{ insightNote }}</p>
 
       <div class="summary-hero__bar" role="img" aria-label="年度收入构成比例">
         <span
@@ -139,14 +187,20 @@ const settlementText = computed(() => {
     </article>
 
     <div class="stat-grid">
-      <article v-for="stat in stats" :key="stat.key" class="stat">
-        <span class="stat__label">{{ stat.label }}</span>
+      <article v-for="stat in stats" :key="stat.key" class="stat ledger-card">
+        <span class="stat__label">
+          <el-icon class="stat__icon"><component :is="stat.icon" /></el-icon>
+          {{ stat.label }}
+        </span>
         <strong class="stat__value num">¥{{ formatMoney(stat.value) }}</strong>
         <span class="stat__sub">{{ stat.sub }}</span>
       </article>
 
       <article class="stat stat--settlement">
-        <span class="stat__label">年度汇算</span>
+        <span class="stat__label">
+          <el-icon class="stat__icon"><Stamp /></el-icon>
+          年度汇算
+        </span>
         <strong class="stat__value stat__value--text">{{ settlementText }}</strong>
         <span class="stat__sub">
           {{
@@ -172,24 +226,29 @@ const settlementText = computed(() => {
   position: relative;
   overflow: hidden;
   padding: 18px 20px;
+  border: 1px solid rgb(34 211 238 / 20%);
   border-radius: var(--app-radius-lg);
-  color: #e8eef6;
+  color: #e8f4ff;
   background:
-    radial-gradient(circle at 88% 0%, rgb(15 118 110 / 60%), transparent 48%),
-    linear-gradient(155deg, #16233a, #1b2c45 58%, #123b38);
-  box-shadow: var(--app-shadow-md);
+    radial-gradient(circle at 88% 0%, rgb(34 211 238 / 26%), transparent 48%),
+    radial-gradient(circle at 0% 100%, rgb(124 92 246 / 16%), transparent 50%),
+    linear-gradient(155deg, #050c16, #071522 58%, #04121c);
+  box-shadow:
+    0 0 0 1px rgb(34 211 238 / 6%),
+    0 24px 60px -34px rgb(0 0 0 / 90%),
+    0 0 60px -30px rgb(34 211 238 / 45%);
 }
 
 .summary-hero::before {
   position: absolute;
   inset: 0;
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgb(255 255 255 / 4%) 0 1px,
-    transparent 1px 28px
-  );
+  background-image:
+    linear-gradient(rgb(56 189 248 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(56 189 248 / 5%) 1px, transparent 1px);
+  background-size: 28px 28px;
   content: '';
   pointer-events: none;
+  mask-image: radial-gradient(circle at 70% 0%, #000, transparent 75%);
 }
 
 .summary-hero > * {
@@ -207,16 +266,16 @@ const settlementText = computed(() => {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  color: #7dd3c7;
+  color: #22d3ee;
   text-transform: uppercase;
 }
 
 .summary-hero__pill {
   padding: 3px 10px;
-  border: 1px solid rgb(125 211 199 / 35%);
+  border: 1px solid rgb(34 211 238 / 35%);
   border-radius: 999px;
   font-size: 12px;
-  color: #9ee3d9;
+  color: #7dd3fc;
 }
 
 .summary-hero__value {
@@ -230,13 +289,48 @@ const settlementText = computed(() => {
 .summary-hero__currency {
   margin-right: 3px;
   font-size: 18px;
-  color: #7dd3c7;
+  color: #22d3ee;
 }
 
 .summary-hero__sub {
   margin-top: 5px;
   font-size: 13px;
-  color: #9fb0c6;
+  color: #93a9c2;
+}
+
+/* 结论行：三格小数字，直接落在主卡上，不再单开一条白色结论带 */
+.summary-hero__insights {
+  display: flex;
+  gap: 20px;
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 1px solid rgb(34 211 238 / 14%);
+  border-radius: var(--app-radius-sm);
+  background: rgb(34 211 238 / 6%);
+  list-style: none;
+}
+
+.summary-hero__insights li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.summary-hero__insight-label {
+  font-size: 11px;
+  color: #7e95b2;
+}
+
+.summary-hero__insight-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e7f4ff;
+}
+
+.summary-hero__note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #7e95b2;
 }
 
 .summary-hero__bar {
@@ -245,7 +339,8 @@ const settlementText = computed(() => {
   margin-top: 16px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 8%);
+  box-shadow: 0 0 14px rgb(34 211 238 / 20%);
 }
 
 .summary-hero__bar-seg {
@@ -254,27 +349,27 @@ const settlementText = computed(() => {
 
 .summary-hero__bar-seg.is-net,
 .summary-hero__dot.is-net {
-  background: #7dd3c7;
+  background: #22d3ee;
 }
 
 .summary-hero__bar-seg.is-insurance,
 .summary-hero__dot.is-insurance {
-  background: #8fa3ba;
+  background: #5b7fa6;
 }
 
 .summary-hero__bar-seg.is-tax,
 .summary-hero__dot.is-tax {
-  background: #e9a23b;
+  background: #fbbf24;
 }
 
 .summary-hero__bar-seg.is-postTax,
 .summary-hero__dot.is-postTax {
-  background: #c86b8a;
+  background: #f472b6;
 }
 
 .summary-hero__bar-seg.is-nonCash,
 .summary-hero__dot.is-nonCash {
-  background: #4b5b72;
+  background: #33465c;
 }
 
 .summary-hero__legend {
@@ -291,13 +386,13 @@ const settlementText = computed(() => {
   gap: 8px;
   align-items: center;
   font-size: 13px;
-  color: #c3cfdf;
+  color: #b3c9e2;
 }
 
 .summary-hero__dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
 }
 
 .summary-hero__legend-label {
@@ -305,13 +400,13 @@ const settlementText = computed(() => {
 }
 
 .summary-hero__legend-value {
-  color: #eef3f9;
+  color: #e7f4ff;
   font-size: 12.5px;
 }
 
 .summary-hero__legend-ratio {
   width: 42px;
-  color: #8496ad;
+  color: #7e95b2;
   font-size: 12px;
   text-align: right;
 }
@@ -335,8 +430,16 @@ const settlementText = computed(() => {
 }
 
 .stat__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12.5px;
   color: var(--app-ink-500);
+}
+
+.stat__icon {
+  font-size: 14px;
+  color: var(--app-jade-600);
 }
 
 .stat__value {
@@ -373,8 +476,8 @@ const settlementText = computed(() => {
   }
 
   .stat:hover {
-    border-color: var(--app-jade-100);
-    box-shadow: 0 10px 24px -14px rgb(15 118 110 / 28%);
+    border-color: var(--app-bracket);
+    box-shadow: 0 10px 24px -14px var(--app-glow);
     transform: translateY(-2px);
   }
 }

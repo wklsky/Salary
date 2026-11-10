@@ -145,29 +145,34 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 </template>
 
 <style scoped>
-/* 右栏结果卡：深墨蓝底 + 玉石绿数值，像一张实时工资条 */
+/* 右栏结果卡：深空底 + 青色光晕 + 网格，像一块实时 HUD 面板 */
 .payslip {
   position: relative;
   overflow: hidden;
   padding: 18px;
+  border: 1px solid rgb(34 211 238 / 20%);
   border-radius: var(--app-radius-lg);
-  color: #e8eef6;
+  color: #e8f4ff;
   background:
-    radial-gradient(circle at 90% 0%, rgb(15 118 110 / 55%), transparent 46%),
-    linear-gradient(160deg, #16233a, #1b2c45 58%, #123b38);
-  box-shadow: var(--app-shadow-md);
+    radial-gradient(circle at 88% 0%, rgb(34 211 238 / 26%), transparent 48%),
+    radial-gradient(circle at 0% 100%, rgb(124 92 246 / 16%), transparent 50%),
+    linear-gradient(155deg, #050c16, #071522 58%, #04121c);
+  box-shadow:
+    0 0 0 1px rgb(34 211 238 / 6%),
+    0 24px 60px -34px rgb(0 0 0 / 90%),
+    0 0 60px -30px rgb(34 211 238 / 45%);
 }
 
 .payslip::before {
   position: absolute;
   inset: 0;
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgb(255 255 255 / 4%) 0 1px,
-    transparent 1px 28px
-  );
+  background-image:
+    linear-gradient(rgb(56 189 248 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(56 189 248 / 5%) 1px, transparent 1px);
+  background-size: 28px 28px;
   content: '';
   pointer-events: none;
+  mask-image: radial-gradient(circle at 70% 0%, #000, transparent 75%);
 }
 
 .payslip > * {
@@ -182,7 +187,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__eyebrow {
-  color: #7dd3c7;
+  color: #22d3ee;
   font-family: var(--app-font-ledger);
   font-size: 12px;
   font-weight: 600;
@@ -191,7 +196,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .payslip__range {
   font-size: 12px;
-  color: #9fb0c6;
+  color: #93a9c2;
 }
 
 .payslip__hero {
@@ -203,7 +208,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .payslip__label {
   font-size: 12px;
-  color: #9fb0c6;
+  color: #93a9c2;
 }
 
 .payslip__value {
@@ -211,17 +216,18 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   font-weight: 600;
   line-height: 1.15;
   color: #fff;
+  text-shadow: 0 0 26px rgb(34 211 238 / 35%);
 }
 
 .payslip__currency {
   margin-right: 3px;
   font-size: 17px;
-  color: #7dd3c7;
+  color: #22d3ee;
 }
 
 .payslip__sub {
   font-size: 12px;
-  color: #9fb0c6;
+  color: #93a9c2;
 }
 
 .payslip__bar {
@@ -230,7 +236,8 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   margin-top: 16px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 8%);
+  box-shadow: 0 0 14px rgb(34 211 238 / 20%);
 }
 
 .payslip__bar-seg {
@@ -239,27 +246,27 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 
 .payslip__bar-seg.is-net,
 .payslip__dot.is-net {
-  background: #7dd3c7;
+  background: #22d3ee;
 }
 
 .payslip__bar-seg.is-insurance,
 .payslip__dot.is-insurance {
-  background: #8fa3ba;
+  background: #5b7fa6;
 }
 
 .payslip__bar-seg.is-tax,
 .payslip__dot.is-tax {
-  background: #e9a23b;
+  background: #fbbf24;
 }
 
 .payslip__bar-seg.is-postTax,
 .payslip__dot.is-postTax {
-  background: #c86b8a;
+  background: #f472b6;
 }
 
 .payslip__bar-seg.is-nonCash,
 .payslip__dot.is-nonCash {
-  background: #4b5b72;
+  background: #33465c;
 }
 
 .payslip__legend {
@@ -276,13 +283,13 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   gap: 7px;
   align-items: center;
   font-size: 12px;
-  color: #c3cfdf;
+  color: #b3c9e2;
 }
 
 .payslip__dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
 }
 
 .payslip__legend-label {
@@ -290,7 +297,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__legend-value {
-  color: #eef3f9;
+  color: #e7f4ff;
   font-size: 12px;
 }
 
@@ -300,7 +307,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   gap: 2px;
   margin: 14px 0 0;
   padding-top: 12px;
-  border-top: 1px dashed rgb(255 255 255 / 18%);
+  border-top: 1px dashed rgb(34 211 238 / 22%);
 }
 
 .payslip__ledger div {
@@ -308,7 +315,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
   justify-content: space-between;
   padding: 4px 0;
   font-size: 13px;
-  color: #a9b8cc;
+  color: #a9bdd6;
 }
 
 .payslip__ledger dt,
@@ -317,36 +324,37 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 }
 
 .payslip__ledger dd {
-  color: #eef3f9;
+  color: #e7f4ff;
 }
 
 .payslip__ledger-total {
   margin-top: 6px;
   padding-top: 9px !important;
-  border-top: 1px dashed rgb(255 255 255 / 18%);
+  border-top: 1px dashed rgb(34 211 238 / 22%);
   color: #fff !important;
   font-weight: 600;
 }
 
 .payslip__ledger-total dd {
-  color: #7dd3c7 !important;
+  color: #22d3ee !important;
   font-size: 14px;
 }
 
 .payslip__cta {
   width: 100%;
   margin-top: 16px;
-  border-color: #7dd3c7;
-  color: #0b3b38;
-  background: #7dd3c7;
+  border-color: #22d3ee;
+  color: #04070d;
+  background: linear-gradient(135deg, #22d3ee, #0891b2);
   font-weight: 600;
+  box-shadow: 0 10px 30px -12px rgb(34 211 238 / 70%);
 }
 
 .payslip__cta:hover,
 .payslip__cta:focus {
-  border-color: #9ee3d9;
-  color: #0b3b38;
-  background: #9ee3d9;
+  border-color: #67e8f9;
+  color: #04070d;
+  background: linear-gradient(135deg, #67e8f9, #22d3ee);
 }
 
 .payslip__cta-icon {
@@ -356,7 +364,7 @@ const visibleSegments = computed(() => segments.value.filter((segment) => segmen
 .payslip__hint {
   margin-top: 8px;
   font-size: 11.5px;
-  color: #8496ad;
+  color: #7e95b2;
   text-align: center;
 }
 

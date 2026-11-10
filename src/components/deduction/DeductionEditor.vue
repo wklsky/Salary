@@ -8,12 +8,14 @@ import { computed } from 'vue'
 import { DEDUCTION_LIST } from '@/config/specialDeductions'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useSalaryStore } from '@/stores/useSalaryStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 import MoneyInput from '@/components/common/MoneyInput.vue'
 import { formatMoney } from '@/utils/format'
 import { round2 } from '@/core'
 import type { DeductionKey, DeductionMeta } from '@/types'
 
 const store = useSalaryStore()
+const settingsStore = useSettingsStore()
 const { result } = useSalaryCalculator()
 
 /** 住房租金按城市分档，租房人群可直接套用常见档位 */
@@ -60,6 +62,7 @@ const monthlyTotal = computed(() =>
   ),
 )
 
+/** 一次性扣除项目合计，展示在年度可扣的说明里 */
 const annualOnceTotal = computed(() =>
   DEDUCTION_LIST.filter((meta) => meta.period === 'annual').reduce(
     (acc, meta) => acc + effectiveAmount(meta),
@@ -67,8 +70,38 @@ const annualOnceTotal = computed(() =>
   ),
 )
 
-/** 年度可扣总额：按月项目 × 12 + 一次性项目 */
-const annualTotal = computed(() => round2(monthlyTotal.value * 12 + annualOnceTotal.value))
+/** 年度可扣总额：按月项目按实际生效月数累计 + 一次性项目 */
+const annualTotal = computed(() =>
+  round2(
+    DEDUCTION_LIST.reduce((acc, meta) => {
+      if (meta.period !== 'monthly') return acc + effectiveAmount(meta)
+      return acc + effectiveAmount(meta) * monthSpanOf(meta.key)
+    }, 0),
+  ),
+)
+
+/** 起止月区间内的可选项，保证结束月不早于起始月 */
+function endMonthOptions(key: DeductionKey) {
+  const from = store.deductions[key]?.startMonth ?? 1
+  return MONTH_OPTIONS.filter((option) => option.value >= from)
+}
+
+/** 扣除生效月数：生效区间与计算区间取交集，中途入职/离职也不会多算 */
+function monthSpanOf(key: DeductionKey): number {
+  const state = store.deductions[key]
+  if (!state?.enabled) return 0
+  const from = Math.max(state.startMonth ?? 1, settingsStore.startMonth)
+  const to = Math.min(state.endMonth ?? 12, settingsStore.endMonth)
+  return Math.max(0, to - from + 1)
+}
+
+/** 调整生效区间，起始月晚于结束月时同步后移结束月 */
+function updateRange(key: DeductionKey, payload: { startMonth?: number; endMonth?: number }) {
+  const state = store.deductions[key]
+  const from = payload.startMonth ?? state?.startMonth ?? 1
+  const to = payload.endMonth ?? state?.endMonth ?? 12
+  store.updateDeduction(key, { startMonth: from, endMonth: Math.max(from, to) })
+}
 
 /** 超出政策限额时给出提示，但不阻断计算（部分情形存在特殊审批额度） */
 function isOverLimit(meta: DeductionMeta): boolean {
@@ -95,6 +128,9 @@ function onToggle(key: DeductionKey, enabled: boolean) {
       <div class="summary-cell">
         <span class="summary-cell__label">年度可扣</span>
         <strong class="summary-cell__value accent">¥{{ formatMoney(annualTotal) }}</strong>
+        <span v-if="annualOnceTotal > 0" class="summary-cell__hint">
+          含一次性扣除 ¥{{ formatMoney(annualOnceTotal) }}
+        </span>
       </div>
     </div>
 
@@ -152,7 +188,37 @@ function onToggle(key: DeductionKey, enabled: boolean) {
             />
           </el-select>
 
-          <span v-else class="unit">按月扣除</span>
+          <template v-else>
+            <span class="unit">生效</span>
+            <el-select
+              :model-value="store.deductions[meta.key]?.startMonth ?? 1"
+              class="deduction-item__month"
+              @update:model-value="
+                (value: number) => updateRange(meta.key, { startMonth: value })
+              "
+            >
+              <el-option
+                v-for="option in MONTH_OPTIONS"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+            <span class="unit">至</span>
+            <el-select
+              :model-value="store.deductions[meta.key]?.endMonth ?? 12"
+              class="deduction-item__month"
+              @update:model-value="(value: number) => updateRange(meta.key, { endMonth: value })"
+            >
+              <el-option
+                v-for="option in endMonthOptions(meta.key)"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+            <span class="unit">共 {{ monthSpanOf(meta.key) }} 个月</span>
+          </template>
         </div>
 
         <div v-if="store.deductions[meta.key]?.enabled" class="deduction-item__extra">
@@ -233,6 +299,11 @@ function onToggle(key: DeductionKey, enabled: boolean) {
 
 .summary-cell__value.accent {
   color: var(--el-color-primary);
+}
+
+.summary-cell__hint {
+  font-size: 11px;
+  color: var(--app-ink-500);
 }
 
 .deduction-list {

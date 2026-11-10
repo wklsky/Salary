@@ -4,18 +4,21 @@
  * @FilePath: src/App.vue
  * @Description: 应用外壳：视图切换（录入设置 / 月度明细）、方案存档与导入导出
  */
-import { computed, nextTick, ref, watch } from 'vue'
-import { Delete, Download, Expand, Fold, Moon, MoreFilled, Refresh, Sunny, Upload } from '@element-plus/icons-vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useWindowSize } from '@vueuse/core'
 import AdminSidebar from '@/components/layout/AdminSidebar.vue'
+import AppToolbar from '@/components/layout/AppToolbar.vue'
 import CompareView from '@/views/CompareView.vue'
 import SetupView from '@/views/SetupView.vue'
 import TableView from '@/views/TableView.vue'
 import ColumnConfigDrawer from '@/components/table-config/ColumnConfigDrawer.vue'
-import { BONUS_SEPARATE_VALID_UNTIL, POLICY_VERSION } from '@/config/policy'
+import { BONUS_SEPARATE_VALID_UNTIL } from '@/config/policy'
+import { migrateSnapshot, PERSIST_VERSION, readVersion } from '@/core/persist'
 import { useExport } from '@/composables/useExport'
+import { useBackup } from '@/composables/useBackup'
 import { useCountUp } from '@/composables/useCountUp'
+import { useHistory } from '@/composables/useHistory'
 import { useSalaryCalculator } from '@/composables/useSalaryCalculator'
 import { useTheme } from '@/composables/useTheme'
 import { useSalaryStore } from '@/stores/useSalaryStore'
@@ -37,7 +40,42 @@ const settingsStore = useSettingsStore()
 const schemaStore = useTableSchemaStore()
 const { result } = useSalaryCalculator()
 const { exportJson, readJsonFile } = useExport()
-const { isDark, toggleTheme } = useTheme()
+const { isDark, isSystem, toggleTheme, useSystemTheme } = useTheme()
+const { canUndo, canRedo, undo, redo } = useHistory()
+const { backupDue, restoreFromBackup } = useBackup()
+
+function onUndo() {
+  if (!undo()) ElMessage.info('没有可撤销的操作')
+}
+
+function onRedo() {
+  if (!redo()) ElMessage.info('没有可重做的操作')
+}
+
+/** 输入框内保留浏览器原生撤销，避免抢走用户正在编辑的文本 */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null
+  if (!element) return false
+  return (
+    element.tagName === 'INPUT' ||
+    element.tagName === 'TEXTAREA' ||
+    element.isContentEditable === true
+  )
+}
+
+/** Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z 或 Ctrl+Y 重做 */
+function onHistoryKeydown(event: KeyboardEvent) {
+  if (!event.ctrlKey && !event.metaKey) return
+  const key = event.key.toLowerCase()
+  if (key !== 'z' && key !== 'y') return
+  if (isTypingTarget(event.target)) return
+  event.preventDefault()
+  if (key === 'y' || event.shiftKey) onRedo()
+  else onUndo()
+}
+
+onMounted(() => window.addEventListener('keydown', onHistoryKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onHistoryKeydown))
 
 const view = ref<AppView>('setup')
 const drawerVisible = ref(false)
@@ -132,6 +170,12 @@ watch(activeSection, () => {
  */
 salaryStore.normalize()
 settingsStore.normalize()
+// 主题迁移：旧版本默认浅色，切换到科技风后首次进入强制展示深色主视觉（只迁移一次，之后尊重用户选择）
+const THEME_MIGRATION_KEY = 'salary-calc:theme-tech-v1'
+if (!localStorage.getItem(THEME_MIGRATION_KEY)) {
+  settingsStore.updateSettings({ theme: 'dark' })
+  localStorage.setItem(THEME_MIGRATION_KEY, '1')
+}
 // 旧版存档的表格 Schema / 内置预设可能缺少新增字段，启动时统一升级
 schemaStore.syncBuiltinPresets()
 schemaStore.syncStaticColumns()
@@ -162,8 +206,10 @@ const annualNet = computed(() => result.value.annual.net)
 const animatedAnnualNet = useCountUp(annualNet)
 
 async function onExportJson() {
-  exportJson(
+  await exportJson(
     {
+      // 存档版本：导入时据此判断能否直接读取，还是需要迁移/升级
+      version: PERSIST_VERSION,
       year: settingsStore.year,
       startMonth: settingsStore.startMonth,
       endMonth: settingsStore.endMonth,
@@ -180,11 +226,18 @@ async function onExportJson() {
     },
     `薪资配置_${settingsStore.year}.json`,
   )
+  // 记录备份时间，提醒胶囊据此判断是否久未导出
+  settingsStore.updateSettings({ lastExportedAt: new Date().toISOString() })
 }
 
 async function onImportJson(rawFile: File) {
   try {
-    const payload = await readJsonFile<{
+    const source = await readJsonFile<unknown>(rawFile)
+    // 版本高于当前应用时不猜测字段含义，直接提示升级
+    if (readVersion(source) > PERSIST_VERSION) {
+      throw new Error('该文件由更新版本的薪资计算器导出，请先升级本应用再导入')
+    }
+    const payload = migrateSnapshot<Record<string, unknown>>(source) as {
       year?: number
       startMonth?: number
       endMonth?: number
@@ -205,7 +258,7 @@ async function onImportJson(rawFile: File) {
       customCities?: CityPolicy[]
       payTiming?: PayTiming
       tableSchema?: Parameters<typeof schemaStore.importSchema>[0]
-    }>(rawFile)
+    }
 
     salaryStore.importSnapshot(payload)
     schemaStore.importSchema(payload.tableSchema)
@@ -230,7 +283,7 @@ async function onImportJson(rawFile: File) {
     ElMessage.success('配置已导入')
   } catch (error) {
     console.error('[salary] 导入配置失败', error)
-    ElMessage.error('导入失败，请检查 JSON 文件格式')
+    ElMessage.error(error instanceof Error ? error.message : '导入失败，请检查 JSON 文件格式')
   }
 }
 
@@ -319,6 +372,18 @@ async function onReset() {
   }
 }
 
+function onSchemeCommand(command: string) {
+  if (command === 'save') {
+    onSaveScheme()
+    return
+  }
+  if (command === 'apply') {
+    onApplyScheme()
+    return
+  }
+  if (command === 'remove') onRemoveScheme()
+}
+
 function onCommand(command: string) {
   if (command === 'import') {
     fileInput.value?.click()
@@ -328,8 +393,13 @@ function onCommand(command: string) {
     onExportJson()
     return
   }
-  if (command === 'remove-scheme') {
-    onRemoveScheme()
+  if (command === 'restore-backup') {
+    restoreFromBackup()
+    return
+  }
+  if (command === 'theme-system') {
+    useSystemTheme()
+    ElMessage.success('已切换为跟随系统主题')
     return
   }
   if (command === 'reset') onReset()
@@ -351,97 +421,35 @@ function onCommand(command: string) {
     </aside>
 
     <div class="app__main">
-      <header class="app__navbar">
-        <div class="app__navbar-left">
-          <button
-            type="button"
-            class="app__toggle"
-            :aria-label="
-              isNarrow ? '打开菜单' : sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'
-            "
-            @click="onToggleSidebar"
-          >
-            <el-icon>
-              <Expand v-if="isNarrow || sidebarCollapsed" />
-              <Fold v-else />
-            </el-icon>
-          </button>
+      <AppToolbar
+        v-model:active-scheme-id="activeSchemeId"
+        :title="viewLabel"
+        :section="activeSectionLabel"
+        :net-value="animatedAnnualNet"
+        :schemes="salaryStore.schemes"
+        :is-dark="isDark"
+        :is-system="isSystem"
+        :can-undo="canUndo"
+        :can-redo="canRedo"
+        :is-narrow="isNarrow"
+        :collapsed="sidebarCollapsed"
+        :backup-due="backupDue"
+        @toggle-sidebar="onToggleSidebar"
+        @scheme-command="onSchemeCommand"
+        @more-command="onCommand"
+        @undo="onUndo"
+        @redo="onRedo"
+        @toggle-theme="toggleTheme"
+        @backup="onExportJson"
+      />
 
-          <el-breadcrumb separator="/" class="app__breadcrumb">
-            <el-breadcrumb-item>薪资计算器</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ viewLabel }}</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="activeSectionLabel">
-              {{ activeSectionLabel }}
-            </el-breadcrumb-item>
-          </el-breadcrumb>
-
-          <el-tooltip
-            :content="`年终奖单独计税有效期至 ${BONUS_SEPARATE_VALID_UNTIL}`"
-            placement="bottom"
-          >
-            <el-tag size="small" effect="plain" class="app__policy">
-              政策版本 {{ POLICY_VERSION }}
-            </el-tag>
-          </el-tooltip>
-        </div>
-
-        <div class="app__actions">
-          <div class="app__net">
-            <span class="app__net-label">年度到手</span>
-            <strong class="app__net-value num">¥{{ animatedAnnualNet.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) }}</strong>
-          </div>
-          <el-select v-model="activeSchemeId" size="small" placeholder="方案存档" class="scheme-select">
-            <el-option
-              v-for="scheme in salaryStore.schemes"
-              :key="scheme.id"
-              :label="scheme.name"
-              :value="scheme.id"
-            />
-          </el-select>
-          <el-button size="small" @click="onSaveScheme">存为方案</el-button>
-          <el-button size="small" :disabled="!activeSchemeId" @click="onApplyScheme">应用</el-button>
-          <el-dropdown trigger="click" @command="onCommand">
-            <el-button size="small" :icon="MoreFilled" text>更多</el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="export" :icon="Download">导出配置</el-dropdown-item>
-                <el-dropdown-item command="import" :icon="Upload">导入配置</el-dropdown-item>
-                <el-dropdown-item
-                  command="remove-scheme"
-                  :icon="Delete"
-                  :disabled="!activeSchemeId"
-                >
-                  删除当前方案
-                </el-dropdown-item>
-                <el-dropdown-item command="reset" :icon="Refresh" divided>
-                  重置数据
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-tooltip :content="isDark ? '切换到浅色' : '切换到深色'" placement="bottom">
-            <button
-              type="button"
-              class="app__theme-toggle"
-              :aria-label="isDark ? '切换到浅色' : '切换到深色'"
-              @click="toggleTheme"
-            >
-              <el-icon>
-                <Sunny v-if="isDark" />
-                <Moon v-else />
-              </el-icon>
-            </button>
-          </el-tooltip>
-        </div>
-
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".json,application/json"
-          hidden
-          @change="onFileChange"
-        />
-      </header>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".json,application/json"
+        hidden
+        @change="onFileChange"
+      />
 
       <main ref="bodyRef" class="app__body">
         <SetupView
@@ -517,150 +525,7 @@ function onCommand(command: string) {
   min-height: 0;
 }
 
-/* 顶部白色导航栏：折叠按钮 + 面包屑 + 操作区 */
-.app__navbar {
-  z-index: 20;
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  min-height: 52px;
-  padding: 6px 18px;
-  background: var(--app-surface);
-  border-bottom: 1px solid var(--app-line);
-}
-
-.app__navbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.app__toggle {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--app-ink-500);
-  font-size: 17px;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.app__toggle:hover {
-  background: var(--app-sunken-2);
-  color: var(--app-ink-900);
-}
-
-.app__toggle:focus-visible {
-  outline: 2px solid var(--app-jade-600);
-  outline-offset: 1px;
-}
-
-.app__breadcrumb {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.app__breadcrumb :deep(.el-breadcrumb__separator) {
-  margin: 0 6px;
-  color: var(--app-line-strong);
-  font-weight: 400;
-}
-
-.app__breadcrumb :deep(.el-breadcrumb__inner) {
-  overflow: hidden;
-  color: var(--app-ink-500);
-  font-weight: 400;
-  text-overflow: ellipsis;
-}
-
-.app__breadcrumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
-  color: var(--app-ink-900);
-  font-weight: 600;
-}
-
-.app__policy {
-  flex: none;
-  margin-left: 2px;
-}
-
-.app__actions {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.app__net {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-right: 2px;
-  padding-right: 12px;
-  border-right: 1px solid var(--app-line);
-}
-
-.app__net-label {
-  font-size: 11px;
-  color: var(--app-ink-500);
-}
-
-.app__net-value {
-  font-size: 16px;
-  line-height: 1.2;
-  color: var(--app-jade-700);
-}
-
-.scheme-select {
-  width: 148px;
-}
-
-/* 主题切换：比普通按钮更轻，只在悬停时浮出底色 */
-.app__theme-toggle {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--app-line);
-  border-radius: 6px;
-  background: var(--app-surface);
-  color: var(--app-ink-500);
-  font-size: 15px;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
-
-.app__theme-toggle:hover {
-  border-color: var(--app-jade-600);
-  background: var(--app-jade-100);
-  color: var(--app-jade-700);
-}
-
-.app__theme-toggle:focus-visible {
-  outline: 2px solid var(--app-jade-600);
-  outline-offset: 2px;
-}
-
+/* 顶部玻璃导航栏：折叠按钮 + 视图标题 + 操作区 */
 .app__body {
   flex: 1 1 auto;
   min-width: 0;
@@ -677,9 +542,10 @@ function onCommand(command: string) {
   justify-content: center;
   gap: 4px 20px;
   padding: 7px 20px;
-  background: color-mix(in srgb, var(--app-surface) 60%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 55%, transparent);
   border-top: 1px solid var(--app-line);
   font-size: 11px;
+  letter-spacing: 0.04em;
   color: var(--app-ink-300);
 }
 
@@ -687,7 +553,7 @@ function onCommand(command: string) {
   height: 100%;
   padding: 0;
   overflow: hidden;
-  background: #152235;
+  background: #060c16;
 }
 
 @media (max-height: 560px) {
@@ -703,32 +569,6 @@ function onCommand(command: string) {
   }
 }
 
-@media (max-width: 860px) {
-  .app__navbar {
-    gap: 8px;
-    padding: 6px 12px;
-  }
-
-  .app__policy {
-    display: none;
-  }
-
-  .app__net {
-    display: none;
-  }
-
-  .app__actions {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  /* 方案下拉可压缩，避免按钮被挤到第二行只剩「更多」孤零零一个 */
-  .scheme-select {
-    flex: 1 1 120px;
-    width: auto;
-    min-width: 0;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .app__sidebar-wrap {

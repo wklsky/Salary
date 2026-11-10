@@ -336,18 +336,19 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
         </span>
         <span class="monthly-table__reverse">
           反推调整项：<b>{{ adjustIncomeName }}</b>
-          <el-button size="small" text type="primary" @click="emit('config-columns')">
-            配置
-          </el-button>
-          <el-button size="small" text type="primary" @click="toggleCumulativeColumns">
-            {{ cumulativeVisible ? '隐藏累计税额' : '显示累计税额' }}
-          </el-button>
-          <el-button size="small" text type="primary" @click="emit('payroll-check')">
-            工资单核对
-          </el-button>
         </span>
       </div>
       <div class="monthly-table__ops">
+        <el-button size="small" text type="primary" @click="emit('config-columns')">
+          配置
+        </el-button>
+        <el-button size="small" text type="primary" @click="toggleCumulativeColumns">
+          {{ cumulativeVisible ? '隐藏累计税额' : '显示累计税额' }}
+        </el-button>
+        <el-button size="small" text type="primary" @click="emit('payroll-check')">
+          工资单核对
+        </el-button>
+        <span class="monthly-table__divider" aria-hidden="true" />
         <el-checkbox v-model="showAllMonths" size="small">显示全部 12 个月</el-checkbox>
         <el-checkbox v-model="stripe" size="small">斑马纹</el-checkbox>
       </div>
@@ -423,6 +424,9 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .monthly-table__reverse b {
@@ -432,8 +436,22 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
 
 .monthly-table__ops {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  margin-left: auto;
+}
+
+.monthly-table__ops :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.monthly-table__divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--app-line-strong);
 }
 
 .monthly-table__count {
@@ -454,12 +472,13 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
   cursor: pointer;
 }
 
-/* 单元格内编辑：平时透明，悬停/聚焦时显示输入框边界 */
+/* 单元格内编辑：平时透明 + 下虚线提示可编辑，悬停/聚焦时显示完整输入框边界 */
 .cell-input {
   width: 100%;
   height: 24px;
   padding: 0 4px;
   border: 1px solid transparent;
+  border-bottom: 1px dashed var(--el-border-color);
   border-radius: 4px;
   background: transparent;
   color: inherit;
@@ -476,11 +495,13 @@ async function onCellEdit(row: Row, column: ColumnSchema, event: Event) {
 
 .cell-input:hover {
   border-color: var(--el-border-color);
+  border-bottom-style: solid;
   background: var(--el-bg-color);
 }
 
 .cell-input:focus {
   border-color: var(--el-color-primary);
+  border-bottom-style: solid;
   background: var(--el-bg-color);
   box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
 }

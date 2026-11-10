@@ -40,11 +40,11 @@
 - 切换视图或分页不会丢失录入，顶栏常驻展示年度到手
 
 **组件拆分**
-- 页面外壳：`AdminSidebar`（深色菜单，唯一导航入口）、`PagePager`（账本式分页页脚）
+- 页面外壳：`AdminSidebar`（深色 HUD 菜单，唯一导航入口）、`PagePager`（HUD 式分页页脚）
 - 录入设置：`SectionPanel`（`el-card` 章节容器）+ `PeriodForm` / `IncomeEditor` / `InsuranceEditor` / `StageEditor` / `DeductionEditor` / `PostTaxDeductionEditor` / `AdvancedForm`
 - 实时结果：`PayslipCard`（独立工资条组件）
-- 月度明细：`ResultCards` / `BonusAdvice` / `MonthlyTable` / `AnnualTable` / `ChartPanel`
-- 基础交互优先使用 Element Plus：`el-card`、`el-tabs`、`el-breadcrumb`、`el-form`、`el-table`、`el-drawer`、`el-button`、`el-tag`、`el-alert`、`el-empty`
+- 月度明细：`ResultCards` / `MonthlyTable` / `AnnualTable` / `ChartPanel` / `ExplainDrawer` / `PayrollCheckDrawer`
+- 基础交互优先使用 Element Plus：`el-card`、`el-form`、`el-table`、`el-drawer`、`el-button`、`el-tag`、`el-alert`、`el-empty`
 - 表格单元格的行内编辑保留原生输入框，以保证 12 个月 × 多列实时编辑的性能
 
 **计算周期**
@@ -142,6 +142,12 @@ npm test           # 运行单元测试（101 项）
 npm run test:watch # 监听模式
 ```
 
+### 安全说明
+
+- 开发服务器只监听 `127.0.0.1`；需要手机调试时临时用 `npm run dev -- --host` 打开，用完即关。
+- 生产构建会向 `dist/index.html` 注入 CSP：`script-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`，即使页面被注入脚本也无法加载外部代码。
+- 数据仍是浏览器本地明文存储（`localStorage`），能挡住远程窃取，挡不住拿到这台电脑的人；重要数据请定期导出备份。
+
 ## 计算口径
 
 ### 累计预扣预缴
@@ -204,6 +210,11 @@ npm run test:watch # 监听模式
 | 表格列配置与自定义列 | `localStorage` 键 `salary-calc:table-schema` |
 
 旧版本存档缺失新字段时，启动阶段会自动补默认值（收入项视为各阶段均发放，公积金基数沿用社保口径），不会因缺字段白屏。
+
+`localStorage` 会被「清除站点数据」、无痕模式关闭或更换浏览器一并清掉，因此：
+
+- 录入变化后自动把三份存档同步一份到 `IndexedDB`（库 `salary-calc-backup`）；主数据为空而备份仍在时，启动会提示恢复，也可从「更多 → 从本地备份恢复」手动恢复。
+- 超过 7 天未导出时，顶栏出现「建议备份」提示，点一下即导出 JSON。**导出文件才是能跨浏览器、跨设备保留的那份副本**，本地备份同样会被全站清理清掉。
 
 ## 目录结构
 

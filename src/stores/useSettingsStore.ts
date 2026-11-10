@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { BonusMode, CityPolicy, PayTiming, TaxpayerType } from '@/types'
+import { PERSIST_VERSION } from '@/core/persist'
 
 /** 一年最多 12 个月，计算区间不得跨自然年 */
 const MAX_MONTH = 12
@@ -33,14 +34,15 @@ interface SettingsPayload {
   customCities: CityPolicy[]
   /** 工资发放时间：当月发放 / 次月发放 */
   payTiming: PayTiming
+  /** 最近一次导出备份的时间（ISO），用于提醒用户定期外部备份 */
+  lastExportedAt: string
 }
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'system'
 
-/** 首次进入时跟随系统偏好，之后以用户选择为准 */
+/** 未来科技风以深色为主视觉，首次进入默认深色；之后以用户选择为准 */
 function preferredTheme(): ThemeMode {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'light'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'dark'
 }
 
 export const useSettingsStore = defineStore(
@@ -100,6 +102,14 @@ export const useSettingsStore = defineStore(
     const customCities = ref<CityPolicy[]>([])
     /** 工资发放时间：次月发放时按实际发放月计税，阶段工资按归属月判定 */
     const payTiming = ref<PayTiming>('same')
+    /** 最近一次导出备份的时间（ISO），空字符串表示从未导出 */
+    const lastExportedAt = ref<string>('')
+    /**
+     * 存档结构版本
+     * 首次读到旧存档时为 0，normalize 后写入当前版本；
+     * 后续若出现破坏性字段调整，可据此决定是否执行迁移
+     */
+    const storageVersion = ref<number>(0)
 
     /** 新增或覆盖一个自定义城市（按 code 覆盖） */
     function upsertCustomCity(city: CityPolicy) {
@@ -137,6 +147,7 @@ export const useSettingsStore = defineStore(
         customCities.value = Array.isArray(payload.customCities) ? payload.customCities : []
       }
       if (payload.payTiming !== undefined) payTiming.value = payload.payTiming
+      if (payload.lastExportedAt !== undefined) lastExportedAt.value = payload.lastExportedAt
       // 保证在职区间合法，避免离职月早于入职月导致零收入
       if (endMonth.value < startMonth.value) endMonth.value = startMonth.value
       // 起始月变化后月数可能溢出年末，收回到年末为止
@@ -152,9 +163,13 @@ export const useSettingsStore = defineStore(
       if (!taxpayerType.value) taxpayerType.value = 'resident'
       if (typeof taxReductionMonthly.value !== 'number') taxReductionMonthly.value = 0
       if (typeof reverseAdjustIncomeId.value !== 'string') reverseAdjustIncomeId.value = ''
-      if (theme.value !== 'light' && theme.value !== 'dark') theme.value = preferredTheme()
+      if (theme.value !== 'light' && theme.value !== 'dark' && theme.value !== 'system') {
+        theme.value = preferredTheme()
+      }
       if (!Array.isArray(customCities.value)) customCities.value = []
       if (payTiming.value !== 'same' && payTiming.value !== 'next') payTiming.value = 'same'
+      if (typeof lastExportedAt.value !== 'string') lastExportedAt.value = ''
+      storageVersion.value = PERSIST_VERSION
     }
 
     return {
@@ -171,6 +186,8 @@ export const useSettingsStore = defineStore(
       theme,
       customCities,
       payTiming,
+      lastExportedAt,
+      storageVersion,
       upsertCustomCity,
       removeCustomCity,
       updateSettings,

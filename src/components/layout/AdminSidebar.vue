@@ -61,6 +61,7 @@ function sectionTitle(item: NavItem): string {
           type="button"
           class="admin-menu__item"
           :class="{ 'is-active': props.view === 'setup' }"
+          :aria-current="props.view === 'setup' ? 'page' : undefined"
           title="录入设置"
           @click="emit('select-view', 'setup')"
         >
@@ -71,6 +72,7 @@ function sectionTitle(item: NavItem): string {
           type="button"
           class="admin-menu__item"
           :class="{ 'is-active': props.view === 'table' }"
+          :aria-current="props.view === 'table' ? 'page' : undefined"
           title="月度明细"
           @click="emit('select-view', 'table')"
         >
@@ -81,6 +83,7 @@ function sectionTitle(item: NavItem): string {
           type="button"
           class="admin-menu__item"
           :class="{ 'is-active': props.view === 'compare' }"
+          :aria-current="props.view === 'compare' ? 'page' : undefined"
           title="方案对比"
           @click="emit('select-view', 'compare')"
         >
@@ -97,6 +100,7 @@ function sectionTitle(item: NavItem): string {
           type="button"
           class="admin-menu__item admin-menu__item--section"
           :class="{ 'is-active': item.key === props.activeSection }"
+          :aria-current="item.key === props.activeSection ? 'page' : undefined"
           :title="sectionTitle(item)"
           @click="emit('select-section', item.key)"
         >
@@ -122,8 +126,10 @@ function sectionTitle(item: NavItem): string {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border-right: 1px solid rgb(255 255 255 / 6%);
-  background: linear-gradient(180deg, #1b2a3d 0%, #152235 100%);
+  border-right: 1px solid var(--app-line);
+  background:
+    radial-gradient(circle at 0% 0%, rgb(34 211 238 / 12%), transparent 42%),
+    linear-gradient(180deg, #050b15 0%, #070e1a 100%);
   color: #b8c4d4;
 }
 
@@ -134,7 +140,7 @@ function sectionTitle(item: NavItem): string {
   gap: 10px;
   height: 60px;
   padding: 0 16px;
-  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  border-bottom: 1px solid var(--app-line);
 }
 
 .admin-sidebar__mark {
@@ -143,14 +149,17 @@ function sectionTitle(item: NavItem): string {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #0f766e, #0b5e57);
-  color: #fff;
+  border: 1px solid rgb(34 211 238 / 45%);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #22d3ee, #0891b2);
+  color: #04070d;
   font-family: var(--app-font-ledger);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
-  box-shadow: 0 8px 16px -10px rgb(15 118 110 / 90%);
+  box-shadow:
+    0 0 18px rgb(34 211 238 / 45%),
+    inset 0 1px 0 rgb(255 255 255 / 35%);
 }
 
 .admin-sidebar__brand-text {
@@ -172,8 +181,9 @@ function sectionTitle(item: NavItem): string {
 
 .admin-sidebar__brand-text span {
   overflow: hidden;
-  color: #7f90a6;
+  color: #5f7a96;
   font-size: 10px;
+  letter-spacing: 0.06em;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -195,7 +205,7 @@ function sectionTitle(item: NavItem): string {
 }
 
 .admin-sidebar__scroll::-webkit-scrollbar-thumb:hover {
-  background-color: #7dd3c7;
+  background-color: #22d3ee;
 }
 
 .admin-menu {
@@ -208,10 +218,10 @@ function sectionTitle(item: NavItem): string {
 .admin-menu__title {
   margin: 0;
   padding: 8px 12px 4px;
-  color: #6f8198;
+  color: #5c7592;
   font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
@@ -223,10 +233,10 @@ function sectionTitle(item: NavItem): string {
   width: 100%;
   min-height: 38px;
   padding: 8px 12px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #b8c4d4;
+  color: #a9bdd4;
   font: inherit;
   font-size: 12.5px;
   font-weight: 500;
@@ -234,38 +244,44 @@ function sectionTitle(item: NavItem): string {
   cursor: pointer;
   transition:
     background 0.18s,
+    border-color 0.18s,
     color 0.18s;
 }
 
 .admin-menu__item:hover {
-  background: rgb(255 255 255 / 6%);
+  background: rgb(34 211 238 / 6%);
+  border-color: rgb(34 211 238 / 14%);
   color: #fff;
 }
 
 .admin-menu__item.is-active {
-  background: rgb(15 118 110 / 26%);
+  background: linear-gradient(90deg, rgb(34 211 238 / 16%), rgb(34 211 238 / 5%));
+  border-color: rgb(34 211 238 / 35%);
   color: #fff;
+  box-shadow: inset 0 0 18px -8px rgb(34 211 238 / 60%);
 }
 
 .admin-menu__item.is-active::before {
   position: absolute;
   top: 8px;
   bottom: 8px;
-  left: 0;
+  left: -1px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #7dd3c7;
+  background: #22d3ee;
+  box-shadow: 0 0 12px #22d3ee;
   content: '';
 }
 
 .admin-menu__icon {
   flex: none;
-  color: #8fa2b7;
+  color: #6f88a4;
   font-size: 15px;
 }
 
 .admin-menu__item.is-active .admin-menu__icon {
-  color: #7dd3c7;
+  color: #22d3ee;
+  filter: drop-shadow(0 0 6px rgb(34 211 238 / 70%));
 }
 
 .admin-menu__index {
@@ -274,9 +290,9 @@ function sectionTitle(item: NavItem): string {
   place-items: center;
   width: 22px;
   height: 22px;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid rgb(34 211 238 / 18%);
   border-radius: 5px;
-  color: #8fa2b7;
+  color: #6f88a4;
   font-family: var(--app-font-num);
   font-size: 9.5px;
   line-height: 1;
@@ -284,8 +300,9 @@ function sectionTitle(item: NavItem): string {
 
 .admin-menu__item.is-active .admin-menu__index {
   border-color: transparent;
-  background: #0f766e;
-  color: #fff;
+  background: #22d3ee;
+  color: #04070d;
+  box-shadow: 0 0 12px rgb(34 211 238 / 55%);
 }
 
 .admin-menu__text {
@@ -305,7 +322,7 @@ function sectionTitle(item: NavItem): string {
 
 .admin-menu__meta {
   overflow: hidden;
-  color: #72859b;
+  color: #5c7592;
   font-size: 10px;
   line-height: 1.35;
   white-space: nowrap;
@@ -313,15 +330,16 @@ function sectionTitle(item: NavItem): string {
 }
 
 .admin-menu__item.is-active .admin-menu__meta {
-  color: #9fe3d8;
+  color: #7dd3fc;
 }
 
 .admin-sidebar__foot {
   flex: none;
   padding: 12px 16px;
-  border-top: 1px solid rgb(255 255 255 / 6%);
-  color: #65778e;
+  border-top: 1px solid var(--app-line);
+  color: #4f6983;
   font-size: 10.5px;
+  letter-spacing: 0.04em;
 }
 
 .is-collapsed .admin-sidebar__brand {

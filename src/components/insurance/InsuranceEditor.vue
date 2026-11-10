@@ -325,7 +325,7 @@ function resetAllRates() {
     />
 
 
-    <div class="rate-panel">
+    <div class="rate-panel ledger-card">
       <div class="rate-panel__head">
         <div class="rate-panel__heading">
           <h3 class="rate-panel__title">缴费比例</h3>
